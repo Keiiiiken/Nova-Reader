@@ -2,11 +2,11 @@
     <style name="Theme.LumaReader" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:navigationBarColor">#FCFAF5</item>
-        <item name="android:statusBarColor">#FCFAF5</item>
+        <item name="android:navigationBarColor">#FFFFFF</item>
+        <item name="android:statusBarColor">#FFFFFF</item>
         <item name="android:windowActionModeOverlay">true</item>
         <item name="android:windowNoTitle">true</item>
-        <item name="android:windowSplashScreenBackground" tools:targetApi="31">#6558F5</item>
+        <item name="android:windowSplashScreenBackground" tools:targetApi="31">#155EEF</item>
         <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="31">@drawable/ic_splash</item>
     </style>
 </resources>

@@ -90,14 +90,14 @@ enum class AppThemeMode(val label: String) {
 }
 
 enum class AppAccent(val label: String) {
-    VIOLET("Violeta"), OCEAN("Océano"), FOREST("Bosque")
+    BLUE("Azul"), VIOLET("Violeta"), OCEAN("Océano"), FOREST("Bosque")
 }
 
 @Immutable
 data class AppSettings(
     val themeMode: AppThemeMode = AppThemeMode.SYSTEM,
-    val accent: AppAccent = AppAccent.VIOLET,
-    val libraryColumns: Int = 2,
+    val accent: AppAccent = AppAccent.BLUE,
+    val libraryColumns: Int = 3,
     val includeShelvedBooks: Boolean = true
 )
 

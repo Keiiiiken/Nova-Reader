@@ -197,8 +197,8 @@ class LibraryRepository(context: Context) {
 
     private fun decodeAppSettings(json: JSONObject) = AppSettings(
         themeMode = json.optEnum("themeMode", AppThemeMode.SYSTEM),
-        accent = json.optEnum("accent", AppAccent.VIOLET),
-        libraryColumns = json.optInt("libraryColumns", 2).coerceIn(2, 3),
+        accent = json.optEnum("accent", AppAccent.BLUE),
+        libraryColumns = json.optInt("libraryColumns", 3).coerceIn(2, 3),
         includeShelvedBooks = json.optBoolean("includeShelvedBooks", true)
     )
 

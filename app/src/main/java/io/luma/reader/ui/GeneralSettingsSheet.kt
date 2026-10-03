@@ -65,7 +65,7 @@ internal fun GeneralSettingsSheet(
                     Spacer(Modifier.width(12.dp))
                     Column {
                         Text("AJUSTES DE LA APP", color = MaterialTheme.colorScheme.secondary, fontWeight = FontWeight.Black)
-                        Text("Tu espacio Luma", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                        Text("Ajustes", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
                         Text("Apariencia general y preferencias de la aplicación", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -103,7 +103,7 @@ internal fun GeneralSettingsSheet(
             item {
                 SettingsGroupTitle("Tamaño de la biblioteca", Icons.Default.ViewModule)
                 Text(
-                    "Elige cuántas portadas aparecen por línea en Inicio y dentro de cada estante.",
+                    "Elige cuántas portadas aparecen por línea en Biblioteca y dentro de cada estante.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -123,7 +123,7 @@ internal fun GeneralSettingsSheet(
             item {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    shape = RoundedCornerShape(22.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(Modifier.padding(18.dp)) {

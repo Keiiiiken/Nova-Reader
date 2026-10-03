@@ -12,14 +12,21 @@ android {
         applicationId = "io.luma.reader"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "1.7.0"
+        versionCode = 10
+        versionName = "1.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
 
     buildTypes {
+        create("preview") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview"
+            matchingFallbacks += listOf("debug")
+            resValue("string", "app_name", "Nova Reader · Prueba")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

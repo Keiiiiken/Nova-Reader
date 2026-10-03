@@ -1,19 +1,20 @@
-# Luma Reader
+# Nova Reader
 
-Luma Reader es una app Android local-first para organizar y leer EPUB 2 y EPUB 3.
+Nova Reader es una app Android local-first para organizar y leer EPUB 2 y EPUB 3.
 
 ## Funciones incluidas
 
 - Importación múltiple mediante el selector seguro de Android.
 - Biblioteca offline con portadas, búsqueda, favoritos, orden y colecciones.
-- Interfaz editorial contemporánea con navegación flotante, portadas generativas y paneles visuales de actividad.
-- Inicio dinámico con acceso directo a la lectura actual, filtros y una biblioteca adaptable al contenido.
+- Biblioteca moderna con fondo limpio, acento azul, filtros subrayados y navegación fija: Biblioteca, Estantes y Notas.
+- Acceso compacto a la lectura actual, búsqueda por título o autor e importación visible.
+- Portadas tipográficas sobrias para libros sin imagen y sección local de subrayados y comentarios.
 - Detección automática de portada desde la primera imagen del libro cuando el EPUB no declara una.
 - Portada editable desde las opciones del libro, copiada de forma segura al almacenamiento privado.
 - Progreso por capítulo y restauración de la posición de lectura.
 - Lectura mediante desplazamiento vertical o páginas horizontales, con salto de capítulo mediante un nuevo gesto en el borde.
 - Zoom por pellizco para ilustraciones, mapas y páginas maquetadas dentro del EPUB.
-- Ajustes generales para toda la aplicación desde el botón superior derecho, separados de los ajustes de lectura.
+- Ajustes generales para toda la aplicación desde el menú superior derecho, separados de los ajustes de lectura.
 - Ajustes independientes por novela, con opción para volver a usar los generales.
 - Panel de ajustes a media pantalla dentro del lector para ver los cambios en vivo.
 - Diez temas de lectura: papel, sepia, arena, menta, lavanda, rosa, cielo, pizarra, noche y OLED.
@@ -36,9 +37,15 @@ Luma Reader es una app Android local-first para organizar y leer EPUB 2 y EPUB 3
 - Caché privada: el EPUB y su contenido se copian al almacenamiento interno de la app.
 - Sin cuenta, anuncios, analítica ni conexión a Internet.
 
+## Versión 1.8.0 — Diseño B
+
+La aplicación mantiene `io.luma.reader` para conservar su biblioteca al actualizarla.
+Los nuevos usuarios comienzan con acento azul y tres columnas; las preferencias guardadas se respetan.
+Las notas abren el libro en su posición guardada. El lector mantiene su funcionamiento actual.
+
 ## Abrir y ejecutar
 
-1. Abre esta carpeta en Android Studio.
+1. Abre esta carpeta en Android Studio con JDK 17, SDK 36 y Build Tools 35.0.0.
 2. Espera a que termine la sincronización de Gradle.
 3. Selecciona un teléfono o emulador con Android 8.0 o superior.
 4. Ejecuta la configuración `app`.
@@ -52,6 +59,16 @@ $env:ANDROID_HOME="$env:LOCALAPPDATA\Android\Sdk"
 ```
 
 El APK se genera en `app/build/outputs/apk/debug/app-debug.apk`.
+
+Para probar el rediseño junto a una instalación existente:
+
+```sh
+./gradlew assemblePreview
+```
+
+El APK está en `app/build/outputs/apk/preview/app-preview.apk`.
+Esta variante se llama “Nova Reader · Prueba”, usa `io.luma.reader.preview` y guarda una biblioteca independiente.
+Para actualizar la app original conservando sus datos se debe usar su misma clave de firma.
 
 ## Compatibilidad y pruebas
 
@@ -67,7 +84,7 @@ Las pruebas instrumentadas en Android 15 cubren:
 - Normalización de frases divididas en etiquetas HTML para lectura visual y TTS natural.
 - Copia y validación de portadas personalizadas.
 - Persistencia separada de ajustes globales y ajustes por novela.
-- Acceso a los ajustes generales desde el logotipo superior.
+- Acceso a los ajustes generales desde el menú superior.
 - Altura del panel de ajustes por novela para conservar la vista en vivo.
 - Persistencia de la densidad de biblioteca y del tiempo real de lectura.
 - Persistencia del filtro de estantería, oscurecimiento nocturno y ritmo detallado de TTS.

@@ -19,9 +19,9 @@ import io.luma.reader.model.AppThemeMode
 val Pine = Color(0xFF6558F5)
 val PineDark = Color(0xFF3A2DB6)
 val Sage = Color(0xFFE6E2FF)
-val Cream = Color(0xFFF7F5F0)
-val Ink = Color(0xFF17161C)
-val MutedInk = Color(0xFF6D6975)
+val Cream = Color(0xFFFFFFFF)
+val Ink = Color(0xFF101828)
+val MutedInk = Color(0xFF667085)
 val Warm = Color(0xFFFF715B)
 
 private data class AccentPalette(
@@ -33,6 +33,7 @@ private data class AccentPalette(
 )
 
 private fun accentPalette(accent: AppAccent) = when (accent) {
+    AppAccent.BLUE -> AccentPalette(Color(0xFF155EEF), Color(0xFF1645A0), Color(0xFFE8EFFD), Color(0xFFA8C5FF), Color(0xFF203B66))
     AppAccent.VIOLET -> AccentPalette(Pine, PineDark, Sage, Color(0xFFBDB4FF), Color(0xFF4436C6))
     AppAccent.OCEAN -> AccentPalette(Color(0xFF087E8B), Color(0xFF04545D), Color(0xFFC5F0F3), Color(0xFF73D8E1), Color(0xFF075D66))
     AppAccent.FOREST -> AccentPalette(Color(0xFF247A55), Color(0xFF145036), Color(0xFFCBEBD9), Color(0xFF85D5AD), Color(0xFF205C43))
@@ -43,16 +44,17 @@ private fun lightColors(accent: AppAccent) = accentPalette(accent).let { palette
     onPrimary = Color.White,
     primaryContainer = palette.container,
     onPrimaryContainer = palette.dark,
-    secondary = Warm,
+    secondary = palette.primary,
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFFFDAD4),
+    secondaryContainer = palette.container,
     background = Cream,
     onBackground = Ink,
-    surface = Color(0xFFFFFDF9),
+    surface = Color.White,
     onSurface = Ink,
-    surfaceVariant = Color(0xFFECE9E3),
+    surfaceVariant = Color(0xFFF2F4F7),
     onSurfaceVariant = MutedInk,
-    outline = Color(0xFFC8C3CC),
+    outline = Color(0xFFD0D5DD),
+    outlineVariant = Color(0xFFEAECF0),
     error = Color(0xFFBA1A1A)
 )}
 
@@ -61,7 +63,7 @@ private fun darkColors(accent: AppAccent) = accentPalette(accent).let { palette 
     onPrimary = Color(0xFF15131B),
     primaryContainer = palette.darkContainer,
     onPrimaryContainer = Color(0xFFE5E0FF),
-    secondary = Color(0xFFFFB4A8),
+    secondary = palette.darkPrimary,
     background = Color(0xFF121116),
     onBackground = Color(0xFFE8E3EC),
     surface = Color(0xFF1A191F),
