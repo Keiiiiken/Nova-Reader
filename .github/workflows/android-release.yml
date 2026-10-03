@@ -1,0 +1,76 @@
+name: Android build and release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Compile and validate
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease lintRelease testReleaseUnitTest
+      - name: Prepare APK
+        id: apk
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
+          mkdir -p release
+          unsigned=app/build/outputs/apk/release/app-release-unsigned.apk
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            : "${STORE_PASSWORD:?Missing keystore password}" "${KEY_ALIAS:?Missing key alias}" "${KEY_PASSWORD:?Missing key password}"
+            keyfile="$RUNNER_TEMP/reader-signing.keystore"
+            trap 'rm -f "$keyfile"' EXIT
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keyfile"
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$keyfile" --ks-key-alias "$KEY_ALIAS" --ks-pass env:STORE_PASSWORD --key-pass env:KEY_PASSWORD --out "release/NovaReader-$version.apk" "$unsigned"
+            certificate=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "release/NovaReader-$version.apk" | sed -n 's/Signer #1 certificate SHA-256 digest: //p')
+            if [ "$certificate" != 'a25061d76d480e6e68eeb75d2fd823eb3657e6d8c50793ffcd090f6a4e1f8727' ]; then
+              echo 'The signing certificate does not match LumaReader-v1.7.0. Update compatibility cannot be guaranteed.' >&2
+              exit 1
+            fi
+            echo 'signed=true' >> "$GITHUB_OUTPUT"
+            printf '%s\n' 'APK firmado con la clave de la versión 1.7.0. Conserva el identificador io.luma.reader.' > release/NOTAS.md
+          else
+            cp "$unsigned" "release/NovaReader-$version-unsigned.apk"
+            echo 'signed=false' >> "$GITHUB_OUTPUT"
+            printf '%s\n' 'Compilación release validada, todavía SIN FIRMA. Este APK no se puede instalar hasta firmarlo con la clave original. No desinstales la versión anterior: su biblioteca es local.' > release/NOTAS.md
+          fi
+          printf '\n%s\n' 'Cambios: mantener pulsada una novela abre las mismas opciones que los tres puntos, en biblioteca, estantes y continuar leyendo. Diseño B.' >> release/NOTAS.md
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NovaReader-${{ steps.apk.outputs.version }}
+          path: |
+            release/
+            app/build/reports/lint-results-release.html
+            app/build/reports/tests/testReleaseUnitTest/
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.apk.outputs.version }}
+          SIGNED: ${{ steps.apk.outputs.signed }}
+        run: |
+          set -euo pipefail
+          flags=()
+          if [ "$SIGNED" != true ]; then flags+=(--prerelease); fi
+          gh release create "v$VERSION-build.$GITHUB_RUN_NUMBER" release/*.apk release/NOTAS.md --target "$GITHUB_SHA" --title "Nova Reader $VERSION · build $GITHUB_RUN_NUMBER" --notes-file release/NOTAS.md "${flags[@]}"

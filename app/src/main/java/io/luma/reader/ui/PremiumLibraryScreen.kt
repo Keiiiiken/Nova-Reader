@@ -17,6 +17,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Arrangement
@@ -385,7 +387,7 @@ private fun LibraryDashboard(
                     Column {
                         Text("Seguir leyendo", style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.height(12.dp))
-                        ContinueReadingCard(continueBook) { onOpenBook(continueBook.id) }
+                        ContinueReadingCard(continueBook, { onOpenBook(continueBook.id) }, { onBookOptions(continueBook) })
                     }
                 }
             }
@@ -474,9 +476,12 @@ private fun EditorialEmptyState(onImport: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ContinueReadingCard(book: Book, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(onClick = onClick).padding(vertical = 4.dp),
+private fun ContinueReadingCard(book: Book, onClick: () -> Unit, onOptions: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).testTag("continue_reading").combinedClickable(
+        onClick = onClick, onLongClick = onOptions, onLongClickLabel = "Opciones de ${book.title}"
+    ).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically) {
         BookCover(book, Modifier.width(52.dp).height(78.dp), compact = true, thumbnail = true)
         Spacer(Modifier.width(14.dp))
@@ -519,9 +524,12 @@ private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ModernBookCard(book: Book, dense: Boolean, onClick: () -> Unit, onOptions: () -> Unit) {
-    Column(Modifier.fillMaxWidth().testTag("book_${book.id}").clickable(onClick = onClick)) {
+    Column(Modifier.fillMaxWidth().testTag("book_${book.id}").combinedClickable(
+        onClick = onClick, onLongClick = onOptions, onLongClickLabel = "Opciones de ${book.title}"
+    )) {
         Box(Modifier.fillMaxWidth().aspectRatio(.67f)) {
             BookCover(book, Modifier.fillMaxSize(), compact = dense)
             if (book.favorite) Icon(Icons.Default.Favorite, "Favorito", tint = MaterialTheme.colorScheme.primary,

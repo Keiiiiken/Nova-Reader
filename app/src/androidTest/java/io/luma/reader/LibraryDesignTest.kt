@@ -56,6 +56,26 @@ class LibraryDesignTest {
         compose.onNodeWithContentDescription("Nuevo estante").assertExists()
     }
 
+    @Test fun longPressOpensTheSameOptionsAsTheMenuButton() {
+        val books = seed()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntilAtLeastOneExists(hasTestTag("book_${books[0].id}"), 30_000)
+        compose.onNodeWithTag("book_${books[0].id}").performTouchInput { longClick() }
+        compose.onNodeWithText("Cambiar portada").assertExists()
+        screenshot("opciones-pulsacion-larga")
+        androidx.test.espresso.Espresso.pressBack()
+        compose.onNodeWithContentDescription("Opciones de ${books[0].title}").performClick()
+        compose.onNodeWithText("Cambiar portada").assertExists()
+        androidx.test.espresso.Espresso.pressBack()
+        compose.onNodeWithTag("continue_reading").performTouchInput { longClick() }
+        compose.onNodeWithText("Cambiar portada").assertExists()
+        androidx.test.espresso.Espresso.pressBack()
+        compose.onNodeWithText("Estantes").performClick()
+        compose.onNodeWithText("Mis favoritos").performClick()
+        compose.onNodeWithTag("book_${books[0].id}").performTouchInput { longClick() }
+        compose.onNodeWithText("Cambiar portada").assertExists()
+    }
+
     @Test fun emptyLibraryKeepsImportAndNavigationAvailable() {
         context.getSharedPreferences("luma_library", Context.MODE_PRIVATE).edit().clear().commit()
         scenario = ActivityScenario.launch(MainActivity::class.java)

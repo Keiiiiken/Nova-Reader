@@ -39,9 +39,14 @@ Nova Reader es una app Android local-first para organizar y leer EPUB 2 y EPUB 3
 
 ## Versión 1.8.0 — Diseño B
 
-La aplicación mantiene `io.luma.reader` para conservar su biblioteca al actualizarla.
+La aplicación mantiene `io.luma.reader`. Para actualizar una instalación existente conservando su biblioteca, también debe firmarse con la clave original.
 Los nuevos usuarios comienzan con acento azul y tres columnas; las preferencias guardadas se respetan.
 Las notas abren el libro en su posición guardada. El lector mantiene su funcionamiento actual.
+
+## Versión 1.8.1
+
+Mantener pulsada una novela abre el mismo menú que los tres puntos, también en estantes y en Continuar leyendo.
+GitHub Actions compila y valida release y publica el APK y los informes. Sin la clave original, el APK publicado queda sin firma y no es instalable. Consulta [compilación y firma](docs/COMPILACION-Y-FIRMA.md).
 
 ## Abrir y ejecutar
 
