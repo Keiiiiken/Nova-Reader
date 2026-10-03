@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="book-id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="book-id">urn:luma:demo</dc:identifier>
+    <dc:title>El jardín de la luz</dc:title>
+    <dc:creator>Clara Monte</dc:creator>
+    <dc:language>es</dc:language>
+  </metadata>
+  <manifest>
+    <item id="nav" href="navigation/nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="c1" href="text/capitulo-1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="c2" href="text/capitulo-2.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="c1"/>
+    <itemref idref="c2"/>
+  </spine>
+</package>

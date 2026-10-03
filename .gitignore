@@ -1,0 +1,22 @@
+# Generated files and local configuration
+.gradle/
+.kotlin/
+**/build/
+.idea/
+*.iml
+local.properties
+.DS_Store
+Thumbs.db
+
+# Secrets and signing keys
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+key.properties
+
+# Compiled apps
+*.apk
+*.aab
+releases/
