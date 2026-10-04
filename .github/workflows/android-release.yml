@@ -8,7 +8,7 @@ permissions:
   statuses: write
 concurrency:
   group: android-release-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   android-tests:
     runs-on: ubuntu-latest
@@ -41,12 +41,12 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_2
+          disk-size: 4096M
+          ram-size: 2048M
+          emulator-boot-timeout: 300
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: |
-            ./gradlew --no-daemon --max-workers=2 connectedDebugAndroidTest
-            ./gradlew --no-daemon --max-workers=2 -PtestMinified connectedReleaseAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.luma.reader.ReaderInteractionTest
-            adb pull /sdcard/Android/data/io.luma.reader/files/screenshots screenshots
+          script: bash scripts/run_android_tests.sh
       - name: Upload device test reports
         if: always()
         uses: actions/upload-artifact@v4

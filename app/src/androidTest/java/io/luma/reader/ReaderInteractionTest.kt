@@ -256,6 +256,7 @@ class ReaderInteractionTest {
         compose.onNodeWithContentDescription("Buscar y marcadores").performClick()
         compose.onNodeWithTag("book_search").performTextInput("luciérnaga")
         compose.waitUntilAtLeastOneExists(hasText("1 coincidencias"), 30_000)
+        screenshot("buscar")
         compose.onNodeWithText("1 coincidencias").performClick()
         compose.waitUntil(30_000) {
             runCatching { evaluateInReader("document.body.textContent.includes('Una luciérnaga')") == "true" }.getOrDefault(false)
@@ -276,6 +277,7 @@ class ReaderInteractionTest {
         assertNotNull(bookmark.anchor)
         assertTrue(bookmark.anchor!!.blockIndex > 0)
         assertTrue(bookmark.progress > 0f)
+        screenshot("marcadores")
     }
 
     @Test
@@ -309,6 +311,8 @@ class ReaderInteractionTest {
     }
 
     private fun screenshot(name: String) {
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        compose.waitForIdle()
         val bitmap = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
         val folder = File(context.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
         File(folder, "$name.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
