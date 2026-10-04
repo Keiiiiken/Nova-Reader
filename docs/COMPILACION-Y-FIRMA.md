@@ -1,6 +1,8 @@
 # Compilación y actualización
 
-GitHub Actions compila `assembleRelease`, ejecuta `lintRelease` y `testReleaseUnitTest`, adjunta informes y publica un release de cada push a main. Esto verifica compilación y pruebas unitarias; no sustituye pruebas del lector en dispositivos reales.
+GitHub Actions ejecuta primero la batería de pruebas instrumentadas en un emulador Android 15 estándar y repite las interacciones del lector sobre la variante release con R8. Después recompila el APK con las reglas normales de distribución y comprueba, desde la interfaz de Android, la migración de una biblioteca de ejemplo, la pulsación larga, el texto del EPUB y las herramientas del lector. Solo si pasan todas estas etapas, compila `assembleRelease`, ejecuta `lintRelease` y publica el release. Adjunta informes y capturas de la app. `testReleaseUnitTest` también se ejecuta, aunque actualmente no hay pruebas JVM en ese directorio; la validación funcional está en `androidTest`.
+
+Las pruebas instrumentadas de release usan una firma debug temporal y conservan las APIs de datos y SDK que comparte el ejecutor con la app mediante `-PtestMinified`. Esa conservación evita que las pruebas intenten llamar a métodos eliminados; el lector y su WebView siguen minificados. La comprobación posterior de la interfaz se hace sobre el APK compilado sin esa propiedad, firmado temporalmente con la clave del emulador. El APK publicado se recompila sin esas reglas y solo se firma con la clave original si los secretos están configurados. No sustituye pruebas en teléfonos físicos ni una conexión OAuth real con Drive.
 
 Sin clave de firma, publica un prerelease con APK `unsigned`, que no se puede instalar. La app principal conserva `io.luma.reader`, nombre Nova Reader y versión 1.9.0 (12). No usa el sufijo de la variante preview.
 

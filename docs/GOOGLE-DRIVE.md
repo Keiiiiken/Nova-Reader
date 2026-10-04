@@ -5,12 +5,14 @@ La app usa Google Identity Services para Android y el permiso `https://www.googl
 ## Configuración del propietario
 
 1. Crear un proyecto en https://console.cloud.google.com/ y activar **Google Drive API**.
-2. En **Google Auth Platform**, configurar Branding (nombre, correo de soporte), Audience (externa si se distribuye al público) y Data Access. Añadir exclusivamente `drive.appdata`. Mientras esté en modo Testing, registrar las cuentas de prueba autorizadas. Antes de distribuir, completar los requisitos de publicación que indique Google.
+2. En **Google Auth Platform**, configurar Branding (nombre, correo de soporte), Audience (externa si se distribuye al público) y Data Access. Añadir exclusivamente `drive.appdata`. Mientras esté en modo Testing, registrar las cuentas de prueba autorizadas. Añadir las URLs de la política de privacidad y de las condiciones de uso que pide la configuración de Google. Antes de distribuir, completar los requisitos de publicación que indique Google.
 3. Crear un cliente OAuth de tipo **Android**. Paquete: `io.luma.reader`. Registrar el SHA-1 del certificado que firma el APK instalado. Para el certificado de la app original adjunta es `9C:B4:12:00:91:89:DB:4E:64:94:3D:20:29:F8:95:31:4F:5A:83:FA`.
 4. Firmar Nova Reader con esa misma clave para actualizar la instalación anterior conservando sus datos. El certificado público no permite recuperar la clave privada. Si Google Play vuelve a firmar el APK, registrar también el SHA-1 del certificado de **App signing** mostrado en Play Console. Para compilar y probar en otro ordenador, registrar otro cliente Android con el SHA-1 de su certificado debug.
 5. Con la cuenta de prueba, abrir Ajustes → Copias de seguridad y Google Drive, elegir cuenta y autorizar. Guardar una copia, listarla y restaurarla en una instalación de prueba; confirmar libros, progreso y anotaciones.
 
 No se incluye un secreto OAuth ni un token en el código. Este flujo Android identifica la app mediante paquete y certificado; no pide introducir un client ID de servidor en la app. No se deben subir keystores ni contraseñas al repositorio. Configurar el proyecto Google Cloud no necesita conceder acceso de Drive a ChatGPT.
+
+Guía oficial del flujo Android: https://developers.google.com/identity/authorization/android
 
 ## Comportamiento y límites
 
