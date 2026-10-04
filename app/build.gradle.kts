@@ -31,7 +31,10 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            if (project.hasProperty("testMinified")) signingConfig = signingConfigs.getByName("debug")
+            if (project.hasProperty("testMinified")) {
+                signingConfig = signingConfigs.getByName("debug")
+                proguardFile("instrumented-release-proguard-rules.pro")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
