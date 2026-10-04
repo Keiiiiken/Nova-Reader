@@ -256,7 +256,7 @@ class ReaderInteractionTest {
         launchAndOpen(book)
         compose.onNodeWithContentDescription("Buscar y marcadores").performClick()
         compose.onNodeWithTag("book_search").performTextInput("luciérnaga")
-        compose.waitUntilAtLeastOneExists(hasText("1 coincidencias"), 30_000)
+        compose.waitUntilAtLeastOneExists(hasText("1 coincidencia"), 30_000)
         screenshot("buscar")
         compose.onNodeWithText("1 coincidencias").performClick()
         compose.waitUntil(30_000) {
@@ -315,9 +315,18 @@ class ReaderInteractionTest {
     }
 
     private fun screenshot(name: String) {
-        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        val automation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+        automation.serviceInfo = automation.serviceInfo.apply {
+            flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        }
+        // A bottom sheet owns a separate window; Espresso may choose the unfocused
+        // activity underneath. Close only an actual IME window through accessibility.
+        if (automation.windows.any { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD }) {
+            automation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+            compose.waitUntil(10_000) { automation.windows.none { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD } }
+        }
         compose.waitForIdle()
-        val bitmap = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        val bitmap = automation.takeScreenshot()
         val folder = File(context.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
         File(folder, "$name.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
