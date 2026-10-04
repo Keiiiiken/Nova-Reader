@@ -258,7 +258,7 @@ class ReaderInteractionTest {
         compose.onNodeWithTag("book_search").performTextInput("luciérnaga")
         compose.waitUntilAtLeastOneExists(hasText("1 coincidencia"), 30_000)
         screenshot("buscar")
-        compose.onNodeWithText("1 coincidencias").performClick()
+        compose.onNodeWithText("1 coincidencia").performClick()
         compose.waitUntil(30_000) {
             runCatching { evaluateInReader("document.body.textContent.includes('Una luciérnaga')") == "true" }.getOrDefault(false)
         }
