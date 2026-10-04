@@ -34,6 +34,7 @@ android {
             if (project.hasProperty("testMinified")) {
                 signingConfig = signingConfigs.getByName("debug")
                 proguardFile("instrumented-release-proguard-rules.pro")
+                proguardFile("instrumented-shared-proguard-rules.pro")
             }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
