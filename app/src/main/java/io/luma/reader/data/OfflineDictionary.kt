@@ -31,7 +31,7 @@ internal class OfflineDictionary(private val context: Context) {
             read("word", word).ifEmpty {
                 val lemma = db.rawQuery("SELECT lemma FROM forms WHERE word=?", arrayOf(word)).use { if (it.moveToFirst()) it.getString(0) else null }
                 if (lemma != null) read("word", lemma).map { it.copy(definitions = listOf(DictionaryDefinition("form", "$word: forma de $lemma.")) + it.definitions) }
-                else read("folded", fold(word))
+                else read("folded COLLATE NOCASE", fold(word))
             }
         }
     }

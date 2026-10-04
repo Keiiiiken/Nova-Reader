@@ -31,10 +31,10 @@ import io.luma.reader.drive.DriveBackupClient
 internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismiss: () -> Unit) {
     val activity = LocalContext.current as Activity
     val authorization = remember(activity) { Identity.getAuthorizationClient(activity) }
-    LaunchedEffect(Unit) { viewModel.clearDriveBackups() }
     var accountName by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingAction by rememberSaveable { mutableStateOf<String?>(null) }
     var authorizing by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(accountName) { if (accountName == null) viewModel.clearDriveBackups() }
     var localRestore by remember { mutableStateOf<Uri?>(null) }
     var driveRestore by remember { mutableStateOf<DriveBackup?>(null) }
     val latestState by rememberUpdatedState(state)

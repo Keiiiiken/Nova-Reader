@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.luma.reader.MainViewModel
@@ -29,7 +30,7 @@ import io.luma.reader.MainViewModel
 @Composable
 fun LumaApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var showBackup by remember { mutableStateOf(false) }
+    var showBackup by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val activeBook = state.activeBookId?.let { id ->
         state.library.books.firstOrNull { it.id == id }
