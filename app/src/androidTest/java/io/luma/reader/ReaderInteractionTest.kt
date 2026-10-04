@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
@@ -286,8 +287,9 @@ class ReaderInteractionTest {
         launchAndOpen(book)
         val value = evaluateInReader("window.scrollTo(0,1000); window.LumaPosition.capture(false)")
         val anchor = org.json.JSONObject(value)
-        val restored = evaluateInReader("document.body.style.fontSize='28px'; window.LumaPosition.restore(" + value + ",false)")
+        val restored = evaluateInReader("document.body.style.setProperty('font-size','28px','important'); window.LumaPosition.restore(" + value + ",false)")
         assertEquals("true", restored)
+        assertEquals("28px", evaluateInReader("getComputedStyle(document.body).fontSize"))
         val position = evaluateInReader("window.LumaPosition.capture(false)")
         assertEquals(anchor.getInt("blockIndex"), org.json.JSONObject(position).getInt("blockIndex"))
     }
@@ -298,14 +300,16 @@ class ReaderInteractionTest {
         scenario = ActivityScenario.launch(MainActivity::class.java)
         compose.waitUntilAtLeastOneExists(hasTestTag("book_interaction-test"), 30_000)
         compose.onNodeWithContentDescription("Abrir ajustes generales").performClick()
-        compose.onNodeWithText("Abrir diccionario sin conexión").performScrollTo().performClick()
+        compose.onNodeWithTag("general_settings_sheet").performScrollToNode(hasText("Abrir diccionario sin conexión"))
+        compose.onNodeWithText("Abrir diccionario sin conexión").performClick()
         compose.onNodeWithTag("dictionary_query").performTextInput("efímero")
         compose.waitUntilAtLeastOneExists(hasTestTag("dictionary_entry_efímero"), 30_000)
         screenshot("diccionario")
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
         compose.waitUntilAtLeastOneExists(hasTestTag("book_interaction-test"), 30_000)
         compose.onNodeWithContentDescription("Abrir ajustes generales").performClick()
-        compose.onNodeWithText("Copias de seguridad y Google Drive").performScrollTo().performClick()
+        compose.onNodeWithTag("general_settings_sheet").performScrollToNode(hasText("Copias de seguridad y Google Drive"))
+        compose.onNodeWithText("Copias de seguridad y Google Drive").performClick()
         compose.waitUntilAtLeastOneExists(hasTestTag("backup_sheet"), 30_000)
         screenshot("copias")
     }

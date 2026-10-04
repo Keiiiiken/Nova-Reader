@@ -550,8 +550,8 @@ private fun ModernBookCard(book: Book, dense: Boolean, onClick: () -> Unit, onOp
                 Text(book.author, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            IconButton(onClick = onOptions, modifier = Modifier.size(24.dp)) {
-                Icon(Icons.Default.MoreHoriz, "Opciones de ${book.title}", Modifier.size(16.dp))
+            IconButton(onClick = onOptions, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.MoreHoriz, "Opciones de ${book.title}", Modifier.size(20.dp))
             }
         }
     }

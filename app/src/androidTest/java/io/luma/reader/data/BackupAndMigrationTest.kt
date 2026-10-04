@@ -86,7 +86,9 @@ class BackupAndMigrationTest {
             input.entries().asSequence().forEach { entry -> output.putNextEntry(ZipEntry(entry.name)); input.getInputStream(entry).use { it.copyTo(output) }; output.closeEntry() }
             output.putNextEntry(ZipEntry("../escape.txt")); output.write("bad".toByteArray()); output.closeEntry()
         } }
-        assertThrows(IllegalArgumentException::class.java) { BackupRepository(context).restore(malicious, LibrarySnapshot(books = listOf(book))) }
+        val failure = assertThrows(Exception::class.java) { BackupRepository(context).restore(malicious, LibrarySnapshot(books = listOf(book))) }
+        // Android 14+ rejects unsafe ZIP paths in ZipFile before our entry allowlist runs.
+        assertTrue(failure is IllegalArgumentException || failure is java.util.zip.ZipException)
         assertTrue(File(book.epubPath).exists())
         assertFalse(File(context.filesDir, "escape.txt").exists())
     }

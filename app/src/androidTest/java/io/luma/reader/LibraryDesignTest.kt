@@ -63,18 +63,26 @@ class LibraryDesignTest {
         scenario = ActivityScenario.launch(MainActivity::class.java)
         compose.waitUntilAtLeastOneExists(hasTestTag("book_${books[0].id}"), 30_000)
         compose.onNodeWithTag("book_${books[0].id}").performTouchInput { longClick() }
+        compose.waitUntilAtLeastOneExists(hasText("Cambiar portada"), 10_000)
         compose.onNodeWithText("Cambiar portada").assertExists()
         screenshot("opciones-pulsacion-larga")
         androidx.test.espresso.Espresso.pressBack()
-        compose.onNodeWithContentDescription("Opciones de ${books[0].title}").performClick()
+        compose.waitUntilDoesNotExist(hasText("Cambiar portada"), 10_000)
+        compose.onNodeWithContentDescription("Opciones de ${books[0].title}").performScrollTo().performClick()
+        compose.waitUntilAtLeastOneExists(hasText("Cambiar portada"), 10_000)
         compose.onNodeWithText("Cambiar portada").assertExists()
         androidx.test.espresso.Espresso.pressBack()
+        compose.waitUntilDoesNotExist(hasText("Cambiar portada"), 10_000)
+        compose.onNodeWithTag("library_grid").performScrollToNode(hasTestTag("continue_reading"))
         compose.onNodeWithTag("continue_reading").performTouchInput { longClick() }
+        compose.waitUntilAtLeastOneExists(hasText("Cambiar portada"), 10_000)
         compose.onNodeWithText("Cambiar portada").assertExists()
         androidx.test.espresso.Espresso.pressBack()
+        compose.waitUntilDoesNotExist(hasText("Cambiar portada"), 10_000)
         compose.onNodeWithText("Estantes").performClick()
         compose.onNodeWithText("Mis favoritos").performClick()
         compose.onNodeWithTag("book_${books[0].id}").performTouchInput { longClick() }
+        compose.waitUntilAtLeastOneExists(hasText("Cambiar portada"), 10_000)
         compose.onNodeWithText("Cambiar portada").assertExists()
     }
 
@@ -95,7 +103,7 @@ class LibraryDesignTest {
     private fun screenshot(name: String) {
         compose.waitForIdle()
         val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-        val directory = File(context.getExternalFilesDir(null), "design-captures").apply { mkdirs() }
+        val directory = File(context.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
         File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
     }
