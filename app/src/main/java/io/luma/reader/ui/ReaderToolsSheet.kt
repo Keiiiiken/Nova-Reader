@@ -57,7 +57,7 @@ internal fun ReaderToolsSheet(book: Book, onDismiss: () -> Unit, onNavigate: (Re
                 items(results, key = { it.chapterIndex }) { result ->
                     Column(Modifier.fillMaxWidth().clickable { onNavigate(ReaderTarget(result.chapterIndex, searchQuery = query.trim())) }.padding(vertical = 8.dp)) {
                         Text(result.title, style = MaterialTheme.typography.titleMedium)
-                        Text("${result.matches} coincidencias", color = MaterialTheme.colorScheme.primary)
+                        Text("${result.matches} ${if (result.matches == 1) "coincidencia" else "coincidencias"}", color = MaterialTheme.colorScheme.primary)
                         Text(result.excerpt, maxLines = 4)
                     }
                     HorizontalDivider()
@@ -68,7 +68,12 @@ internal fun ReaderToolsSheet(book: Book, onDismiss: () -> Unit, onNavigate: (Re
                 items(book.bookmarks.sortedByDescending { it.createdAt }, key = ReaderBookmark::id) { bookmark ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f).clickable { onNavigate(ReaderTarget(bookmark.chapterIndex, bookmark.anchor, bookmark.progress)) }.padding(vertical = 8.dp)) {
-                            Text(bookmark.label.ifBlank { "Capítulo ${bookmark.chapterIndex + 1}" }, maxLines = 2)
+                            Text(book.chapters.getOrNull(bookmark.chapterIndex)?.title
+                                ?: bookmark.label.ifBlank { "Capítulo ${bookmark.chapterIndex + 1}" }, maxLines = 2)
+                            bookmark.anchor?.text?.takeIf { it.isNotBlank() }?.let { fragment ->
+                                Text("… $fragment", maxLines = 2, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                             Text("${((bookmark.chapterIndex + bookmark.progress) / book.chapters.size.coerceAtLeast(1) * 100).toInt()}% del libro", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         IconButton(onClick = { onDeleteBookmark(bookmark.id) }) { Icon(Icons.Default.DeleteOutline, "Eliminar marcador") }
