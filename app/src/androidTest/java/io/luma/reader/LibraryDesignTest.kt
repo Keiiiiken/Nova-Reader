@@ -25,6 +25,8 @@ class LibraryDesignTest {
 
     @After fun cleanUp() {
         scenario?.close()
+        io.luma.reader.data.LibraryWrites.awaitIdle()
+        context.deleteDatabase("nova-library.db")
         context.getSharedPreferences("luma_library", Context.MODE_PRIVATE).edit().clear().commit()
         File(context.filesDir, "library/design-test").deleteRecursively()
     }
@@ -77,6 +79,8 @@ class LibraryDesignTest {
     }
 
     @Test fun emptyLibraryKeepsImportAndNavigationAvailable() {
+        io.luma.reader.data.LibraryWrites.awaitIdle()
+        context.deleteDatabase("nova-library.db")
         context.getSharedPreferences("luma_library", Context.MODE_PRIVATE).edit().clear().commit()
         scenario = ActivityScenario.launch(MainActivity::class.java)
         compose.waitUntilAtLeastOneExists(hasText("Importar un libro"), 30_000)

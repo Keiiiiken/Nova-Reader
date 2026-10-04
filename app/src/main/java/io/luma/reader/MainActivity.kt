@@ -13,6 +13,11 @@ import io.luma.reader.ui.theme.LumaTheme
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
+    override fun onStop() {
+        viewModel.flushPersistence()
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

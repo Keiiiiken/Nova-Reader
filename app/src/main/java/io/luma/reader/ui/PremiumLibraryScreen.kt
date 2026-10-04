@@ -150,7 +150,9 @@ fun LibraryScreen(
     onSort: (LibrarySort) -> Unit,
     onGridView: (Boolean) -> Unit,
     onGeneralSettingsChanged: (ReaderSettings) -> Unit,
-    onAppSettingsChanged: (io.luma.reader.model.AppSettings) -> Unit
+    onAppSettingsChanged: (io.luma.reader.model.AppSettings) -> Unit,
+    onOpenBackup: () -> Unit,
+    onOpenAnnotation: (String, io.luma.reader.model.ReaderAnnotation) -> Unit
 ) {
     val focusManager = LocalFocusManager.current
     var section by rememberSaveable { mutableStateOf(HomeSection.LIBRARY) }
@@ -162,6 +164,7 @@ fun LibraryScreen(
     var showSort by remember { mutableStateOf(false) }
     var showGeneralSettings by remember { mutableStateOf(false) }
     var showReadingSettings by remember { mutableStateOf(false) }
+    var showDictionary by remember { mutableStateOf(false) }
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { onImport(it) }
@@ -221,7 +224,7 @@ fun LibraryScreen(
                     onOpenBook = onOpenBook,
                     onBookOptions = { selectedBook = it }
                 )
-                HomeSection.NOTES -> NotesDashboard(state, onOpenBook)
+                HomeSection.NOTES -> NotesDashboard(state, onOpenAnnotation)
             }
         }
 
@@ -274,6 +277,8 @@ fun LibraryScreen(
         GeneralSettingsSheet(
             settings = state.library.appSettings,
             onSettingsChanged = onAppSettingsChanged,
+            onOpenBackup = { showGeneralSettings = false; onOpenBackup() },
+            onOpenDictionary = { showGeneralSettings = false; showDictionary = true },
             onDismiss = { showGeneralSettings = false },
             onOpenReadingSettings = {
                 showGeneralSettings = false
@@ -281,6 +286,8 @@ fun LibraryScreen(
             }
         )
     }
+
+    if (showDictionary) DictionarySheet("", onDismiss = { showDictionary = false })
 
     if (showReadingSettings) {
         ReaderSettingsSheet(
@@ -331,10 +338,10 @@ private fun LibraryDashboard(
     onSettings: () -> Unit, onImport: () -> Unit,
     onOpenBook: (String) -> Unit, onBookOptions: (Book) -> Unit
 ) {
-    val visibleLibraryBooks = state.library.books.filter {
+    val visibleLibraryBooks = remember(state.library.books, state.library.appSettings.includeShelvedBooks) { state.library.books.filter {
         state.library.appSettings.includeShelvedBooks || it.collectionId == null
-    }
-    val books = visibleLibraryBooks.asSequence()
+    } }
+    val books = remember(visibleLibraryBooks, query, filter, state.library.sort) { visibleLibraryBooks.asSequence()
         .filter { query.isBlank() || it.title.contains(query, true) || it.author.contains(query, true) }
         .filter { when (filter) {
             FILTER_READING -> it.progress in .001f..0.995f
@@ -347,8 +354,8 @@ private fun LibraryDashboard(
             LibrarySort.TITLE -> sequence.sortedBy { it.title.lowercase() }
             LibrarySort.AUTHOR -> sequence.sortedBy { it.author.lowercase() }
             LibrarySort.PROGRESS -> sequence.sortedByDescending { it.progress }
-        } }.toList()
-    val continueBook = visibleLibraryBooks.filter { it.progress in .001f..0.995f }.maxByOrNull { it.lastOpenedAt }
+        } }.toList() }
+    val continueBook = remember(visibleLibraryBooks) { visibleLibraryBooks.filter { it.progress in .001f..0.995f }.maxByOrNull { it.lastOpenedAt } }
     val columns = state.library.appSettings.libraryColumns.coerceIn(2, 3)
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
@@ -755,7 +762,7 @@ private fun CollectionCard(collection: BookCollection, books: List<Book>, onOpen
 }
 
 @Composable
-private fun NotesDashboard(state: AppUiState, onOpenBook: (String) -> Unit) {
+private fun NotesDashboard(state: AppUiState, onOpenAnnotation: (String, io.luma.reader.model.ReaderAnnotation) -> Unit) {
     val entries = state.library.books.flatMap { book -> book.annotations.map { book to it } }
         .sortedByDescending { it.second.createdAt }
     LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
@@ -772,13 +779,13 @@ private fun NotesDashboard(state: AppUiState, onOpenBook: (String) -> Unit) {
             }
         }
         items(entries, key = { "${it.first.id}:${it.second.id}" }) { (book, annotation) ->
-            Column(Modifier.fillMaxWidth().clickable { onOpenBook(book.id) }.padding(vertical = 8.dp)) {
+            Column(Modifier.fillMaxWidth().clickable { onOpenAnnotation(book.id, annotation) }.padding(vertical = 8.dp)) {
                 Text(book.title, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(8.dp))
                 if (annotation.selectedText.isNotBlank()) Text(annotation.selectedText, maxLines = 6, overflow = TextOverflow.Ellipsis)
                 if (annotation.note.isNotBlank()) Text(annotation.note, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp))
-                Text("Capítulo ${annotation.chapterIndex + 1} · Abrir libro", style = MaterialTheme.typography.labelSmall,
+                Text("Capítulo ${annotation.chapterIndex + 1} · Ir al fragmento", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

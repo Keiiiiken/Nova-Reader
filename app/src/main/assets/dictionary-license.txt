@@ -1,0 +1,14 @@
+# Diccionario interno
+
+Definiciones de **Wikcionario en español**, extraídas por **Kaikki.org / Wiktextract**.
+
+- Fuente: https://kaikki.org/eswiktionary/Espa%C3%B1ol/
+- Diccionario original: https://es.wiktionary.org/
+- Autores: colaboradores de Wikcionario. Para cada entrada, su historial de atribuciones está en `https://es.wiktionary.org/w/index.php?title=PALABRA&action=history` (codificar PALABRA en la URL).
+- Licencia del texto: **Creative Commons Attribution-ShareAlike 4.0**: https://creativecommons.org/licenses/by-sa/4.0/ y texto legal https://creativecommons.org/licenses/by-sa/4.0/legalcode.es
+
+Adaptación en Nova Reader: normalización de claves, selección de hasta doce acepciones por entrada, eliminación de datos ajenos a las definiciones y representación de flexiones mediante referencias al lema. El índice derivado se distribuye bajo la misma licencia CC BY-SA 4.0. Los créditos se muestran dentro de la app, en el diccionario y en Ajustes → Diccionario y créditos. Esta licencia corresponde a los datos del diccionario y no sustituye la licencia del código.
+
+El archivo `dictionary-es-v1.sqlite.gz` contiene 115.421 entradas con definiciones y 460.537 formas que remiten a sus lemas. Ocupa aproximadamente 10,1 MiB en el APK y 36,9 MiB en el almacenamiento privado cuando se consulta por primera vez. Se consulta por índices SQLite en segundo plano; no se carga todo en memoria ni se hacen peticiones de red. Las definiciones pueden ser incompletas y reflejan el contenido de Wikcionario.
+
+Reproducción del índice: `python3 scripts/build_dictionary.py`. La extracción se conserva fuera del proyecto; no se incluyen sus 1,4 GiB en el código de Android. El archivo de metadatos dentro de assets identifica fuente, idioma, licencia, versión y número de entradas.

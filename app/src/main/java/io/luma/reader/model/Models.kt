@@ -30,7 +30,32 @@ data class Book(
     val review: String = "",
     val rating: Int = 0,
     val annotations: List<ReaderAnnotation> = emptyList(),
-    val readingTimeMillis: Long = 0L
+    val readingTimeMillis: Long = 0L,
+    val readingAnchor: ReadingAnchor? = null,
+    val bookmarks: List<ReaderBookmark> = emptyList()
+)
+
+@Immutable
+data class ReadingAnchor(val blockIndex: Int, val offset: Int = 0, val text: String = "")
+
+@Immutable
+data class ReaderBookmark(
+    val id: String,
+    val chapterIndex: Int,
+    val progress: Float,
+    val anchor: ReadingAnchor? = null,
+    val label: String = "",
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Immutable
+data class ReaderTarget(
+    val chapterIndex: Int,
+    val anchor: ReadingAnchor? = null,
+    val progress: Float = 0f,
+    val annotationId: String? = null,
+    val searchQuery: String? = null,
+    val id: String = java.util.UUID.randomUUID().toString()
 )
 
 @Immutable

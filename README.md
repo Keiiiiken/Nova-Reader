@@ -97,3 +97,15 @@ Las pruebas instrumentadas en Android 15 cubren:
 - Disponibilidad de “Leer desde aquí” junto a la acción de subrayado.
 
 Puedes usar `sample-book/El-jardin-de-la-luz.epub` para una prueba rápida.
+
+## Versión 1.9.0
+
+Diccionario español incluido para uso sin conexión; búsqueda por capítulos de todo el libro, marcadores con posiciones de texto, acceso desde notas al fragmento y exportación de notas a Markdown. Copias locales ZIP con restauración de EPUB, portadas, progreso, notas, marcadores, estantes y ajustes; soporte opcional de Google Drive appDataFolder.
+
+La biblioteca migra de SharedPreferences a SQLite. Las escrituras se realizan ordenadas fuera del hilo principal; el progreso se agrupa y se guarda también al salir. Los capítulos se preparan en segundo plano con caché acotada y precarga del siguiente. Cambiar tipografía actualiza el estilo del documento sin volver a cargarlo. Release utiliza R8 y reducción de recursos.
+
+- [Configurar Google Drive](docs/GOOGLE-DRIVE.md)
+- [Licencia y datos del diccionario](docs/DICCIONARIO-LICENCIA.md)
+- [Compilación y firma](docs/COMPILACION-Y-FIRMA.md)
+
+Las copias de Drive son manuales y necesitan configurar un cliente OAuth Android para la firma instalada. El APK principal mantiene el paquete y el icono originales.

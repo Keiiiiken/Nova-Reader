@@ -1,1 +1,4 @@
-# Luma Reader currently keeps its release build unobfuscated for easier diagnostics.
+# Android WebView calls these methods by name from JavaScript.
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}

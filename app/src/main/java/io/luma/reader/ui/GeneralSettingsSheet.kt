@@ -30,7 +30,10 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -46,8 +49,14 @@ internal fun GeneralSettingsSheet(
     settings: AppSettings,
     onSettingsChanged: (AppSettings) -> Unit,
     onOpenReadingSettings: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onOpenBackup: () -> Unit = {},
+    onOpenDictionary: () -> Unit = {}
 ) {
+    var showCredits by remember { mutableStateOf(false) }
+    if (showCredits) AlertDialog(onDismissRequest = { showCredits = false }, title = { Text("Diccionario y créditos") },
+        text = { Text("Definiciones de Wikcionario en español, extraídas por Kaikki/Wiktextract y adaptadas a un índice local. Licencia CC BY-SA 4.0. Fuente: https://es.wiktionary.org · https://kaikki.org/eswiktionary/ · Licencia: https://creativecommons.org/licenses/by-sa/4.0/") },
+        confirmButton = { TextButton(onClick = { showCredits = false }) { Text("Cerrar") } })
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -140,6 +149,11 @@ internal fun GeneralSettingsSheet(
                         }
                     }
                 }
+            }
+            item {
+                OutlinedButton(onClick = onOpenBackup, modifier = Modifier.fillMaxWidth()) { Text("Copias de seguridad y Google Drive") }
+                OutlinedButton(onClick = onOpenDictionary, modifier = Modifier.fillMaxWidth()) { Text("Abrir diccionario sin conexión") }
+                TextButton(onClick = { showCredits = true }) { Text("Diccionario y créditos") }
             }
             item {
                 Text(

@@ -12,8 +12,8 @@ android {
         applicationId = "io.luma.reader"
         minSdk = 26
         targetSdk = 36
-        versionCode = 11
-        versionName = "1.8.1"
+        versionCode = 12
+        versionName = "1.9.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -28,13 +28,17 @@ android {
             resValue("string", "app_name", "Nova Reader · Prueba")
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            if (project.hasProperty("testMinified")) signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
         }
     }
+
+    if (project.hasProperty("testMinified")) testBuildType = "release"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -47,6 +51,7 @@ android {
         compose = true
         buildConfig = true
     }
+    androidResources { noCompress += "bin" }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
@@ -65,6 +70,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.webkit:webkit:1.12.1")
+    implementation("com.google.android.gms:play-services-auth:21.4.0")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.12.01"))

@@ -2,7 +2,7 @@
 
 GitHub Actions compila `assembleRelease`, ejecuta `lintRelease` y `testReleaseUnitTest`, adjunta informes y publica un release de cada push a main. Esto verifica compilación y pruebas unitarias; no sustituye pruebas del lector en dispositivos reales.
 
-Sin clave de firma, publica un prerelease con APK `unsigned`, que no se puede instalar. La app principal conserva `io.luma.reader`, nombre Nova Reader y versión 1.8.1 (11). No usa el sufijo de la variante preview.
+Sin clave de firma, publica un prerelease con APK `unsigned`, que no se puede instalar. La app principal conserva `io.luma.reader`, nombre Nova Reader y versión 1.9.0 (12). No usa el sufijo de la variante preview.
 
 Android solo permite actualizar LumaReader 1.7.0 conservando sus datos cuando el certificado coincide. El certificado público de esa versión es SHA-256 `a25061d76d480e6e68eeb75d2fd823eb3657e6d8c50793ffcd090f6a4e1f8727`. El archivo de clave privada original no está entre los archivos del proyecto recibidos. No desinstalar la app anterior: sus datos locales podrían perderse.
 

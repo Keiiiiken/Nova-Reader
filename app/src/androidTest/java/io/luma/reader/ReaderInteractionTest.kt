@@ -11,6 +11,8 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
@@ -29,6 +31,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -50,6 +53,8 @@ class ReaderInteractionTest {
     fun cleanUp() {
         scenario?.close()
         scenario = null
+        io.luma.reader.data.LibraryWrites.awaitIdle()
+        context.deleteDatabase("nova-library.db")
         context.getSharedPreferences("luma_library", Context.MODE_PRIVATE).edit().clear().commit()
         File(context.filesDir, "library/interaction-test").deleteRecursively()
     }
@@ -243,17 +248,87 @@ class ReaderInteractionTest {
         )
     }
 
+    @Test
+    fun searchNavigatesToAResultInAnotherChapter() {
+        val book = seedLibrary(ReadingMode.SCROLL)
+        File(book.contentPath, "text/second.xhtml").writeText("<html><body><h1>Destino de búsqueda</h1><p>Una luciérnaga ilumina el camino.</p></body></html>")
+        launchAndOpen(book)
+        compose.onNodeWithContentDescription("Buscar y marcadores").performClick()
+        compose.onNodeWithTag("book_search").performTextInput("luciérnaga")
+        compose.waitUntilAtLeastOneExists(hasText("1 coincidencias"), 30_000)
+        compose.onNodeWithText("1 coincidencias").performClick()
+        compose.waitUntil(30_000) {
+            runCatching { evaluateInReader("document.body.textContent.includes('Una luciérnaga')") == "true" }.getOrDefault(false)
+        }
+        compose.waitUntil(15_000) { LibraryRepository(context).load().books.single().chapterIndex == 1 }
+    }
+
+    @Test
+    fun bookmarkCapturesTheTextPositionAndPersists() {
+        val book = seedLibrary(ReadingMode.SCROLL)
+        launchAndOpen(book)
+        evaluateInReader("window.scrollTo(0,800); 'ok'")
+        compose.onNodeWithContentDescription("Buscar y marcadores").performClick()
+        compose.onNodeWithText("Marcadores").performClick()
+        compose.onNodeWithText("Guardar posición actual").performClick()
+        compose.waitUntil(15_000) { LibraryRepository(context).load().books.single().bookmarks.isNotEmpty() }
+        val bookmark = LibraryRepository(context).load().books.single().bookmarks.single()
+        assertNotNull(bookmark.anchor)
+        assertTrue(bookmark.anchor!!.blockIndex > 0)
+        assertTrue(bookmark.progress > 0f)
+    }
+
+    @Test
+    fun textAnchorRestoresTheSameFragmentAfterAFontResize() {
+        val book = seedLibrary(ReadingMode.SCROLL)
+        launchAndOpen(book)
+        val value = evaluateInReader("window.scrollTo(0,1000); window.LumaPosition.capture(false)")
+        val anchor = org.json.JSONObject(value)
+        val restored = evaluateInReader("document.body.style.fontSize='28px'; window.LumaPosition.restore(" + value + ",false)")
+        assertEquals("true", restored)
+        val position = evaluateInReader("window.LumaPosition.capture(false)")
+        assertEquals(anchor.getInt("blockIndex"), org.json.JSONObject(position).getInt("blockIndex"))
+    }
+
+    @Test
+    fun dictionaryAndBackupsAreAccessibleWithoutOpeningABook() {
+        seedLibrary(ReadingMode.SCROLL)
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntilAtLeastOneExists(hasTestTag("book_interaction-test"), 30_000)
+        compose.onNodeWithContentDescription("Abrir ajustes generales").performClick()
+        compose.onNodeWithText("Abrir diccionario sin conexión").performScrollTo().performClick()
+        compose.onNodeWithTag("dictionary_query").performTextInput("efímero")
+        compose.waitUntilAtLeastOneExists(hasTestTag("dictionary_entry_efímero"), 30_000)
+        screenshot("diccionario")
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+        compose.waitUntilAtLeastOneExists(hasTestTag("book_interaction-test"), 30_000)
+        compose.onNodeWithContentDescription("Abrir ajustes generales").performClick()
+        compose.onNodeWithText("Copias de seguridad y Google Drive").performScrollTo().performClick()
+        compose.waitUntilAtLeastOneExists(hasTestTag("backup_sheet"), 30_000)
+        screenshot("copias")
+    }
+
+    private fun screenshot(name: String) {
+        val bitmap = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+        val folder = File(context.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
+        File(folder, "$name.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        bitmap.recycle()
+    }
+
     private fun launchAndOpen(book: Book) {
         scenario = ActivityScenario.launch(MainActivity::class.java)
-        compose.waitUntilAtLeastOneExists(hasTestTag("book_${book.id}"), 8_000)
+        compose.waitUntilAtLeastOneExists(hasTestTag("book_${book.id}"), 30_000)
         compose.onNodeWithTag("book_${book.id}").performClick()
-        compose.waitUntilAtLeastOneExists(hasTestTag("epub_content"), 8_000)
-        // Give WebView time to finish layout and compute its scroll range.
+        compose.waitUntilAtLeastOneExists(hasTestTag("epub_content"), 30_000)
+        compose.waitUntil(30_000) {
+            runCatching { evaluateInReader("window.LumaReaderReady === true") == "true" }.getOrDefault(false)
+        }
         compose.waitForIdle()
-        Thread.sleep(1_500)
     }
 
     private fun seedLibrary(mode: ReadingMode, paragraphCount: Int = 100): Book {
+        io.luma.reader.data.LibraryWrites.awaitIdle()
+        context.deleteDatabase("nova-library.db")
         context.getSharedPreferences("luma_library", Context.MODE_PRIVATE).edit().clear().commit()
         val bookDir = File(context.filesDir, "library/interaction-test").apply {
             deleteRecursively()

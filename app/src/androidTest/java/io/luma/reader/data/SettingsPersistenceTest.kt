@@ -29,6 +29,8 @@ class SettingsPersistenceTest {
 
     @After
     fun cleanUp() {
+        io.luma.reader.data.LibraryWrites.awaitIdle()
+        context.deleteDatabase("nova-library.db")
         context.getSharedPreferences("luma_library", Context.MODE_PRIVATE).edit().clear().commit()
         root.deleteRecursively()
     }

@@ -10,7 +10,63 @@ concurrency:
   group: android-release-${{ github.ref }}
   cancel-in-progress: false
 jobs:
+  android-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Report tests started
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" -f state=pending -f context='Android device tests' -f description='Testing reader, dictionary and backups on Android' -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --silent
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install compile SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;35.0.0'
+      - name: Run device tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: |
+            ./gradlew --no-daemon --max-workers=2 connectedDebugAndroidTest
+            ./gradlew --no-daemon --max-workers=2 -PtestMinified connectedReleaseAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=io.luma.reader.ReaderInteractionTest
+            adb pull /sdcard/Android/data/io.luma.reader/files/screenshots screenshots
+      - name: Upload device test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-device-tests
+          path: |
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+            screenshots/
+      - name: Report test result
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB_RESULT: ${{ job.status }}
+        run: |
+          state=failure
+          if [ "$JOB_RESULT" = success ]; then state=success; fi
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" -f state="$state" -f context='Android device tests' -f description="Android device tests: $JOB_RESULT" -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --silent
   build:
+    needs: android-tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,7 +118,7 @@ jobs:
             echo 'signed=false' >> "$GITHUB_OUTPUT"
             printf '%s\n' 'Compilación release validada, todavía SIN FIRMA. Este APK no se puede instalar hasta firmarlo con la clave original. No desinstales la versión anterior: su biblioteca es local.' > release/NOTAS.md
           fi
-          printf '\n%s\n' 'Cambios: mantener pulsada una novela abre las mismas opciones que los tres puntos, en biblioteca, estantes y continuar leyendo. Diseño B.' >> release/NOTAS.md
+          printf '\n%s\n' 'Cambios: diccionario español sin conexión, búsqueda en todo el libro, marcadores, posiciones de texto, notas navegables, copias locales y soporte opcional de Drive appDataFolder. SQLite y lectura de capítulos en segundo plano. Drive requiere configurar el cliente OAuth Android; consulta docs/GOOGLE-DRIVE.md.' >> release/NOTAS.md
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:

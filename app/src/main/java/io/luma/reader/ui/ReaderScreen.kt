@@ -59,6 +59,7 @@ import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -91,6 +92,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -107,6 +109,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.luma.reader.epub.EpubParser
+import io.luma.reader.reader.ChapterContent
+import io.luma.reader.model.ReadingAnchor
+import io.luma.reader.model.ReaderBookmark
+import io.luma.reader.model.ReaderTarget
 import io.luma.reader.model.Book
 import io.luma.reader.model.ReaderAnnotation
 import io.luma.reader.model.ReaderFont
@@ -116,12 +122,16 @@ import io.luma.reader.model.ReaderTheme
 import io.luma.reader.model.ReadingMode
 import java.io.File
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import org.json.JSONArray
 import org.json.JSONObject
 import org.json.JSONTokener
+
+private data class PreparedChapter(val key: String, val html: String, val baseUrl: String)
 
 private data class ReadingColors(
     val background: Color,
@@ -173,6 +183,69 @@ private val ReaderInk = Color(0xFF17161C)
 private class ReaderWebView(context: Context) : WebView(context) {
     var readingMode: ReadingMode = ReadingMode.SCROLL
     var pendingProgress: Float = 0f
+    var pendingAnchor: ReadingAnchor? = null
+    var pageReady = false
+    private var desiredCss = ""
+    private var desiredMode = ReadingMode.SCROLL
+    private var styleRevision = 0
+
+    fun captureAnchor(callback: (ReadingAnchor?) -> Unit) {
+        if (!pageReady) { callback(null); return }
+        evaluateJavascript("window.LumaPosition ? window.LumaPosition.capture(${readingMode == ReadingMode.PAGED}) : ''") { raw ->
+            val anchor = runCatching {
+                val value = JSONTokener(raw).nextValue() as? String ?: return@runCatching null
+                val json = JSONObject(value)
+                ReadingAnchor(json.getInt("blockIndex"), json.optInt("offset"), json.optString("text"))
+            }.getOrNull()
+            callback(anchor)
+        }
+    }
+
+    fun restoreAnchor(anchor: ReadingAnchor?, fallback: () -> Unit = {}) {
+        if (anchor == null) { fallback(); return }
+        val json = JSONObject().put("blockIndex", anchor.blockIndex).put("offset", anchor.offset).put("text", anchor.text)
+        evaluateJavascript("window.LumaPosition && window.LumaPosition.restore($json,${readingMode == ReadingMode.PAGED})") { result ->
+            if (result != "true") fallback()
+        }
+    }
+
+    private fun cssScript(css: String) = "(function(){var style=document.getElementById('luma-reader-style');if(style)style.textContent=${JSONObject.quote(css)};})()"
+
+    fun setReaderStyle(css: String, mode: ReadingMode) {
+        if (desiredCss == css && desiredMode == mode) return
+        desiredCss = css; desiredMode = mode
+        val revision = ++styleRevision
+        if (!pageReady) return
+        val progress = currentProgress()
+        captureAnchor { anchor ->
+            if (revision == styleRevision && pageReady) {
+                readingMode = mode
+                evaluateJavascript(cssScript(css)) {
+                    postDelayed({ restoreAnchor(anchor) { pendingProgress = progress; restoreProgress() } }, 100)
+                }
+            }
+        }
+    }
+
+    fun finishDocument(onReady: () -> Unit) {
+        evaluateJavascript(cssScript(desiredCss)) {
+            readingMode = desiredMode; pageReady = true
+            restoreProgress()
+            postDelayed({ applyAnnotations(force = true) }, 180)
+            postDelayed({ evaluateJavascript("window.LumaReaderReady=true") { onReady() } }, 300)
+        }
+    }
+
+    fun navigateTo(target: ReaderTarget) {
+        when {
+            target.annotationId != null -> scrollToAnnotation(target.annotationId)
+            target.searchQuery != null -> {
+                evaluateJavascript("window.LumaPosition && window.LumaPosition.find(${JSONObject.quote(target.searchQuery)},${readingMode == ReadingMode.PAGED})", null)
+                findAllAsync(target.searchQuery)
+            }
+            else -> restoreAnchor(target.anchor) { pendingProgress = target.progress; restoreProgress() }
+        }
+    }
     var reportProgress: (Float) -> Unit = {}
     var annotationsJson: String = "[]"
     var reportSelection: (SelectionData?) -> Unit = {}
@@ -258,10 +331,12 @@ private class ReaderWebView(context: Context) : WebView(context) {
 
     fun restoreProgress() {
         postDelayed({
-            if (readingMode == ReadingMode.PAGED) {
-                scrollTo((horizontalRange() * pendingProgress.coerceIn(0f, 1f)).roundToInt(), 0)
-            } else {
-                scrollTo(0, (verticalRange() * pendingProgress.coerceIn(0f, 1f)).roundToInt())
+            restoreAnchor(pendingAnchor) {
+                if (readingMode == ReadingMode.PAGED) {
+                    scrollTo((horizontalRange() * pendingProgress.coerceIn(0f, 1f)).roundToInt(), 0)
+                } else {
+                    scrollTo(0, (verticalRange() * pendingProgress.coerceIn(0f, 1f)).roundToInt())
+                }
             }
         }, 140)
     }
@@ -292,7 +367,11 @@ fun ReaderScreen(
     onUseGlobalSettings: () -> Unit,
     onGlobalBrightnessChanged: (Float) -> Unit,
     onGlobalExtraDimChanged: (Float) -> Unit,
-    onReadingTimeAdded: (Long) -> Unit
+    onReadingTimeAdded: (Long) -> Unit,
+    readerTarget: ReaderTarget? = null,
+    onAnchorChanged: (Int, ReadingAnchor) -> Unit = { _, _ -> },
+    onSaveBookmark: (ReaderBookmark) -> Unit = {},
+    onDeleteBookmark: (String) -> Unit = {}
 ) {
     var chapterIndex by remember(book.id) { mutableIntStateOf(book.chapterIndex.coerceIn(0, book.chapters.lastIndex)) }
     var chapterProgress by remember(book.id) { mutableFloatStateOf(book.chapterProgress) }
@@ -300,6 +379,10 @@ fun ReaderScreen(
     var showSettings by remember { mutableStateOf(false) }
     var showContents by remember { mutableStateOf(false) }
     var showAnnotations by remember { mutableStateOf(false) }
+    var showTools by remember { mutableStateOf(false) }
+    var dictionaryWord by remember { mutableStateOf<String?>(null) }
+    var chapterAnchor by remember(book.id) { mutableStateOf(book.readingAnchor) }
+    var pendingNavigation by remember(book.id) { mutableStateOf<ReaderTarget?>(null) }
     var annotationDraft by remember { mutableStateOf<AnnotationDraft?>(null) }
     var pendingSelection by remember { mutableStateOf<SelectionData?>(null) }
     var webView by remember { mutableStateOf<ReaderWebView?>(null) }
@@ -326,6 +409,9 @@ fun ReaderScreen(
     var lastNarrationBlock by remember(book.id) { mutableIntStateOf(-1) }
     val latestReaderSettings = rememberUpdatedState(settings)
     val latestChapterIndex = rememberUpdatedState(chapterIndex)
+    val latestChapterProgress = rememberUpdatedState(chapterProgress)
+    val latestPositionChanged = rememberUpdatedState(onPositionChanged)
+    val latestAnchorChanged = rememberUpdatedState(onAnchorChanged)
     val readingTimer = remember(book.id) { longArrayOf(0L) }
     val latestReadingTimeAdded = rememberUpdatedState(onReadingTimeAdded)
 
@@ -372,7 +458,10 @@ fun ReaderScreen(
                 }
                 Lifecycle.Event.ON_PAUSE,
                 Lifecycle.Event.ON_STOP,
-                Lifecycle.Event.ON_DESTROY -> flushTimer()
+                Lifecycle.Event.ON_DESTROY -> {
+                    latestPositionChanged.value(latestChapterIndex.value, latestChapterProgress.value)
+                    flushTimer()
+                }
                 else -> Unit
             }
         }
@@ -381,6 +470,7 @@ fun ReaderScreen(
             startTimer()
         }
         onDispose {
+            latestPositionChanged.value(latestChapterIndex.value, latestChapterProgress.value)
             flushTimer()
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
@@ -557,16 +647,25 @@ fun ReaderScreen(
     LaunchedEffect(chapterIndex, chapterProgress) {
         delay(650)
         onPositionChanged(chapterIndex, chapterProgress)
+        val index = chapterIndex
+        webView?.captureAnchor { anchor ->
+            if (anchor != null && latestChapterIndex.value == index) {
+                chapterAnchor = anchor
+                onAnchorChanged(index, anchor)
+            }
+        }
     }
 
-    BackHandler(enabled = showSettings || showContents || showAnnotations || annotationDraft != null) {
+    BackHandler(enabled = showSettings || showContents || showAnnotations || showTools || dictionaryWord != null || annotationDraft != null) {
         showSettings = false
         showContents = false
         showAnnotations = false
         annotationDraft = null
+        showTools = false
+        dictionaryWord = null
     }
 
-    fun changeChapter(newIndex: Int, initialProgress: Float = 0f) {
+    fun changeChapter(newIndex: Int, initialProgress: Float = 0f, anchor: ReadingAnchor? = null) {
         if (newIndex !in book.chapters.indices) return
         tts?.stop()
         webView?.clearNarrationPosition()
@@ -581,11 +680,36 @@ fun ReaderScreen(
         narrationStartWhenPageReady = false
         lastNarrationBlock = -1
         chapterIndex = newIndex
+        chapterAnchor = anchor
+        webView?.clearMatches()
         pendingSelection = null
         chapterProgress = initialProgress.coerceIn(0f, 1f)
         onPositionChanged(newIndex, chapterProgress)
         controlsVisible = true
     }
+
+    fun exitReader() {
+        onPositionChanged(chapterIndex, chapterProgress)
+        val index = chapterIndex
+        val view = webView
+        if (view?.pageReady == true) view.captureAnchor { anchor ->
+            if (anchor != null) onAnchorChanged(index, anchor)
+            onBack()
+        } else onBack()
+    }
+    BackHandler(enabled = !showSettings && !showContents && !showAnnotations && !showTools && dictionaryWord == null && annotationDraft == null) { exitReader() }
+
+    fun navigate(target: ReaderTarget) {
+        showTools = false
+        showAnnotations = false
+        if (target.chapterIndex == chapterIndex && webView?.pageReady == true) {
+            webView?.navigateTo(target)
+        } else {
+            pendingNavigation = target
+            changeChapter(target.chapterIndex, target.progress, target.anchor)
+        }
+    }
+    LaunchedEffect(readerTarget?.id) { readerTarget?.let(::navigate) }
 
     fun enqueueNarration(engine: TextToSpeech, startChunk: Int, startOffset: Int) {
         if (narrationChunks.isEmpty() || startChunk !in narrationChunks.indices) return
@@ -770,8 +894,10 @@ fun ReaderScreen(
                 chapterIndex = chapterIndex,
                 settings = settings,
                 initialProgress = chapterProgress,
+                initialAnchor = chapterAnchor,
                 onWebViewReady = { webView = it },
                 onPageReady = {
+                    pendingNavigation?.let { target -> webView?.navigateTo(target); pendingNavigation = null }
                     val engine = tts
                     if (narrationStartWhenPageReady && engine != null && ttsReady) {
                         narrationStartWhenPageReady = false
@@ -820,8 +946,9 @@ fun ReaderScreen(
                 ReaderTopBar(
                     title = chapter.title,
                     colors = colors,
-                    onBack = onBack,
+                    onBack = ::exitReader,
                     onContents = { showContents = true },
+                    onTools = { showTools = true },
                     onSettings = { showSettings = true }
                 )
             }
@@ -963,11 +1090,28 @@ fun ReaderScreen(
                             Spacer(Modifier.width(6.dp))
                             Text("Subrayar", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                         }
+                        IconButton(onClick = { dictionaryWord = pendingSelection?.text }, modifier = Modifier.testTag("lookup_selection")) {
+                            Icon(Icons.Default.MenuBook, "Consultar diccionario", tint = ReaderAccent)
+                        }
                     }
                 }
             }
         }
     }
+
+    if (showTools) {
+        ReaderToolsSheet(book, onDismiss = { showTools = false }, onNavigate = ::navigate,
+            onBookmarkCurrent = {
+                val index = chapterIndex
+                val progress = chapterProgress
+                webView?.captureAnchor { anchor ->
+                    onSaveBookmark(ReaderBookmark(java.util.UUID.randomUUID().toString(), index, progress, anchor,
+                        anchor?.text?.take(80).orEmpty().ifBlank { book.chapters[index].title }))
+                }
+            }, onDeleteBookmark = onDeleteBookmark,
+            onDictionary = { showTools = false; dictionaryWord = "" })
+    }
+    dictionaryWord?.let { DictionarySheet(it, onDismiss = { dictionaryWord = null }) }
 
     if (showContents) {
         ContentsSheet(
@@ -999,17 +1143,17 @@ fun ReaderScreen(
 
     if (showAnnotations) {
         AnnotationsSheet(
-            annotations = annotations.filter { it.chapterIndex == chapterIndex },
+            annotations = annotations,
             onDismiss = { showAnnotations = false },
             onAddChapterComment = {
                 showAnnotations = false
                 annotationDraft = AnnotationDraft("", -1, 0, 0)
             },
             onSelect = {
-                webView?.scrollToAnnotation(it.id)
-                showAnnotations = false
+                navigate(ReaderTarget(it.chapterIndex, annotationId = it.id))
             },
             onEdit = {
+                if (it.chapterIndex != chapterIndex) changeChapter(it.chapterIndex)
                 showAnnotations = false
                 annotationDraft = AnnotationDraft(
                     selectedText = it.selectedText,
@@ -1080,7 +1224,7 @@ private fun AnnotationsSheet(
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Anotaciones", style = MaterialTheme.typography.headlineMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Black)
-                    Text("Subrayados y comentarios de este capítulo", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Subrayados y comentarios de todo el libro", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = onAddChapterComment) {
                     Icon(Icons.Default.AddComment, "Comentar capítulo")
@@ -1201,6 +1345,7 @@ private fun EpubWebView(
     chapterIndex: Int,
     settings: ReaderSettings,
     initialProgress: Float,
+    initialAnchor: ReadingAnchor?,
     onWebViewReady: (ReaderWebView) -> Unit,
     onPageReady: () -> Unit,
     onSelectionChanged: (SelectionData?) -> Unit,
@@ -1226,6 +1371,40 @@ private fun EpubWebView(
         append(settings.readingMode).append(':')
         append(settings.fontSize).append(':').append(settings.lineHeight).append(':')
         append(settings.horizontalMargin)
+    }
+
+    val documentKey = "${book.id}:$chapterIndex:${book.contentPath}"
+    val prepared by produceState<PreparedChapter?>(null, documentKey) {
+        value = withContext(Dispatchers.IO) {
+            val chapter = book.chapters[chapterIndex]
+            val file = File(book.contentPath, chapter.href)
+            val original = runCatching { ChapterContent.read(book, chapterIndex) }.getOrElse {
+                "<html><body><h2>No se pudo abrir este capítulo</h2><p>${android.text.TextUtils.htmlEncode(it.message.orEmpty())}</p></body></html>"
+            }
+            PreparedChapter(documentKey, injectReaderCss(original, settings, colors), file.parentFile?.toURI()?.toString() ?: File(book.contentPath).toURI().toString())
+        }
+    }
+    LaunchedEffect(documentKey) {
+        withContext(Dispatchers.IO) {
+            if (chapterIndex + 1 in book.chapters.indices) runCatching { ChapterContent.read(book, chapterIndex + 1) }
+        }
+    }
+    val styleCss = remember(signature) { readerStyle(settings, colors).substringAfter("<style id=\"luma-reader-style\">").substringBefore("</style>") }
+    val document = prepared?.takeIf { it.key == documentKey }
+    if (document == null) {
+        Box(modifier, contentAlignment = Alignment.Center) { androidx.compose.material3.CircularProgressIndicator() }
+        return
+    }
+
+    val readerContext = androidx.compose.ui.platform.LocalContext.current
+    val hasWebView = remember(readerContext) {
+        runCatching { androidx.webkit.WebViewCompat.getCurrentWebViewPackage(readerContext) != null }.getOrDefault(false)
+    }
+    if (!hasWebView) {
+        Box(modifier, contentAlignment = Alignment.Center) {
+            Text("Para abrir el lector, instala o actualiza Android System WebView y vuelve a abrir la app.", Modifier.padding(24.dp))
+        }
+        return
     }
 
     AndroidView(
@@ -1256,11 +1435,7 @@ private fun EpubWebView(
 
                     override fun onPageFinished(view: WebView, url: String?) {
                         (view as? ReaderWebView)?.apply {
-                            restoreProgress()
-                            postDelayed({ applyAnnotations(force = true) }, 180)
-                            postDelayed({
-                                latestPageReady.value()
-                            }, 220)
+                            finishDocument { latestPageReady.value() }
                         }
                     }
                 }
@@ -1335,26 +1510,21 @@ private fun EpubWebView(
                 onWebViewReady(this)
             }
         },
+        onRelease = { view -> view.pageReady = false; view.stopLoading(); view.destroy() },
         update = { view ->
-            if (view.tag != signature) {
-                view.tag = signature
-                view.readingMode = settings.readingMode
+            view.setReaderStyle(styleCss, settings.readingMode)
+            view.setBackgroundColor(colors.background.toArgbCompat())
+            if (view.tag != documentKey) {
+                view.tag = documentKey
+                view.pageReady = false
                 view.pendingProgress = initialProgress
+                view.pendingAnchor = initialAnchor
                 view.annotationsJson = annotationsJson
                 view.reportProgress = { latestProgress.value(it) }
-                view.reportSelection = { latestSelection.value(it) }
-                view.setBackgroundColor(colors.background.toArgbCompat())
-                val chapter = book.chapters[chapterIndex]
-                val file = File(book.contentPath, chapter.href)
-                val original = runCatching { EpubParser.readDocument(file) }.getOrElse {
-                    "<html><body><h2>No se pudo abrir este capítulo</h2><p>${it.message.orEmpty()}</p></body></html>"
-                }
-                val html = injectReaderCss(original, settings, colors)
-                val baseUrl = file.parentFile?.toURI()?.toString() ?: File(book.contentPath).toURI().toString()
-                view.loadDataWithBaseURL(baseUrl, html, "text/html", "UTF-8", null)
+                view.loadDataWithBaseURL(document.baseUrl, document.html, "text/html", "UTF-8", null)
             } else if (view.annotationsJson != annotationsJson) {
                 view.annotationsJson = annotationsJson
-                view.applyAnnotations()
+                if (view.pageReady) view.applyAnnotations()
             }
             view.reportSelection = { latestSelection.value(it) }
         }
@@ -1367,6 +1537,7 @@ private fun ReaderTopBar(
     colors: ReadingColors,
     onBack: () -> Unit,
     onContents: () -> Unit,
+    onTools: () -> Unit,
     onSettings: () -> Unit
 ) {
     Row(
@@ -1414,6 +1585,9 @@ private fun ReaderTopBar(
             Row {
                 IconButton(onClick = onContents, modifier = Modifier.size(46.dp)) {
                     Icon(Icons.AutoMirrored.Filled.List, "Índice", tint = colors.foreground)
+                }
+                IconButton(onClick = onTools, modifier = Modifier.size(46.dp)) {
+                    Icon(Icons.Default.Search, "Buscar y marcadores", tint = colors.foreground)
                 }
                 IconButton(onClick = onSettings, modifier = Modifier.size(46.dp)) {
                     Icon(Icons.Default.Settings, "Ajustes", tint = colors.foreground)
@@ -1872,16 +2046,7 @@ private fun readingColors(theme: ReaderTheme): ReadingColors = when (theme) {
     )
 }
 
-private fun injectReaderCss(
-    html: String,
-    settings: ReaderSettings,
-    colors: ReadingColors
-): String {
-    // A number of fixed-layout EPUBs explicitly disable zoom. Luma owns the
-    // viewport while reading so illustrations can always be enlarged.
-    val document = html
-        .replace(Regex("(?is)<script\\b[^>]*>.*?</script>"), "")
-        .replace(Regex("(?is)<meta\\b[^>]*\\bname\\s*=\\s*['\"]viewport['\"][^>]*?/?>"), "")
+private fun readerStyle(settings: ReaderSettings, colors: ReadingColors): String {
     val pagedCss = if (settings.readingMode == ReadingMode.PAGED) {
         """
           html {
@@ -1921,7 +2086,7 @@ private fun injectReaderCss(
     val darkColorScheme = settings.theme in setOf(
         ReaderTheme.NIGHT, ReaderTheme.SLATE, ReaderTheme.OLED
     )
-    val css = """
+    return """
         <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.75, maximum-scale=5.0, user-scalable=yes" />
         <style id="luma-reader-style">
           :root { color-scheme: ${if (darkColorScheme) "dark" else "light"}; }
@@ -1979,8 +2144,78 @@ private fun injectReaderCss(
           $pagedCss
         </style>
     """.trimIndent()
+}
+
+private fun injectReaderCss(
+    html: String,
+    settings: ReaderSettings,
+    colors: ReadingColors
+): String {
+    // A number of fixed-layout EPUBs explicitly disable zoom. Luma owns the
+    // viewport while reading so illustrations can always be enlarged.
+    val document = html
+        .replace(Regex("(?is)<script\\b[^>]*>.*?</script>"), "")
+        .replace(Regex("(?is)<meta\\b[^>]*\\bname\\s*=\\s*['\"]viewport['\"][^>]*?/?>"), "")
+    val css = readerStyle(settings, colors)
     val annotationScript = """
         <script>
+          window.LumaPosition = (function() {
+            var selector='p,li,blockquote,h1,h2,h3,h4,h5,h6,td,pre,figcaption';
+            function blocks() { return Array.prototype.slice.call(document.querySelectorAll(selector)); }
+            function locate(block, offset) {
+              var walker=document.createTreeWalker(block,NodeFilter.SHOW_TEXT), node, cursor=0;
+              while(node=walker.nextNode()) {
+                if (offset<=cursor+node.nodeValue.length) return {node:node,offset:Math.max(0,offset-cursor)};
+                cursor+=node.nodeValue.length;
+              }
+              return null;
+            }
+            function restore(anchor,paged) {
+              var list=blocks(),block=list[anchor.blockIndex],offset=anchor.offset||0;
+              if (anchor.text && (!block || block.textContent.substr(offset,anchor.text.length)!==anchor.text)) {
+                for(var i=0;i<list.length;i++) {
+                  var found=list[i].textContent.indexOf(anchor.text);
+                  if(found>=0) { block=list[i];offset=found;break; }
+                }
+              }
+              if(!block) return false;
+              var point=locate(block,Math.min(offset,Math.max(0,block.textContent.length-1))),rect=block.getBoundingClientRect();
+              if(point) {
+                var range=document.createRange();range.setStart(point.node,point.offset);
+                range.setEnd(point.node,Math.min(point.offset+1,point.node.nodeValue.length));
+                if(range.getClientRects().length) rect=range.getClientRects()[0];
+              }
+              if(paged) window.scrollTo(Math.floor((window.scrollX+rect.left)/window.innerWidth)*window.innerWidth,0);
+              else window.scrollTo(0,Math.max(0,window.scrollY+rect.top-120));
+              return true;
+            }
+            return {
+              capture:function(paged) {
+                var list=blocks(),range=document.caretRangeFromPoint && document.caretRangeFromPoint(window.innerWidth*.35,125);
+                var node=range&&range.startContainer,element=node&&(node.nodeType===3?node.parentElement:node);
+                var block=element&&element.closest(selector),index=list.indexOf(block),offset=0;
+                if(index>=0) {
+                  var prefix=document.createRange();prefix.selectNodeContents(block);prefix.setEnd(node,range.startOffset);offset=prefix.toString().length;
+                } else {
+                  for(var i=0;i<list.length;i++) {
+                    var rect=list[i].getBoundingClientRect();
+                    if(rect.bottom>120 && rect.top<window.innerHeight && rect.right>0 && rect.left<window.innerWidth) { block=list[i];index=i;break; }
+                  }
+                }
+                if(index<0) return '';
+                return JSON.stringify({blockIndex:index,offset:offset,text:block.textContent.substr(offset,64)});
+              },
+              restore:restore,
+              find:function(query,paged) {
+                var list=blocks(),term=query.toLocaleLowerCase();
+                for(var i=0;i<list.length;i++) {
+                  var offset=list[i].textContent.toLocaleLowerCase().indexOf(term);
+                  if(offset>=0) return restore({blockIndex:i,offset:offset},paged);
+                }
+                return false;
+              }
+            };
+          })();
           window.LumaAnnotations = (function() {
             var blockSelector = 'p,li,blockquote,h1,h2,h3,h4,h5,h6,td,pre,figcaption';
             function blockFor(node) {

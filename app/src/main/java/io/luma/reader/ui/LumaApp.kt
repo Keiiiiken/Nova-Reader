@@ -6,6 +6,17 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import io.luma.reader.model.ReaderTarget
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,6 +29,7 @@ import io.luma.reader.MainViewModel
 @Composable
 fun LumaApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var showBackup by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val activeBook = state.activeBookId?.let { id ->
         state.library.books.firstOrNull { it.id == id }
@@ -33,6 +45,13 @@ fun LumaApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     BackHandler(enabled = activeBook != null) { viewModel.closeBook() }
 
     Surface(modifier) {
+        if (state.loading) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                if (state.loadingError == null) CircularProgressIndicator()
+                else Text(state.loadingError!!, Modifier.padding(24.dp))
+            }
+            return@Surface
+        }
         // Animate only actual navigation. Reading progress updates the Book object often;
         // using the full object as Crossfade's target caused a new transition while scrolling.
         Crossfade(targetState = state.activeBookId, label = "main-navigation") { activeId ->
@@ -55,7 +74,9 @@ fun LumaApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                     onSort = viewModel::setSort,
                     onGridView = viewModel::setGridView,
                     onGeneralSettingsChanged = viewModel::updateSettings,
-                    onAppSettingsChanged = viewModel::updateAppSettings
+                    onAppSettingsChanged = viewModel::updateAppSettings,
+                    onOpenBackup = { showBackup = true },
+                    onOpenAnnotation = { bookId, annotation -> viewModel.openAt(bookId, ReaderTarget(annotation.chapterIndex, annotationId = annotation.id)) }
                 )
             } else {
                 ReaderScreen(
@@ -88,11 +109,14 @@ fun LumaApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                     onGlobalExtraDimChanged = { extraDim ->
                         viewModel.updateSettings(state.library.settings.copy(extraDim = extraDim))
                     },
-                    onReadingTimeAdded = { elapsed ->
-                        viewModel.addReadingTime(book.id, elapsed)
-                    }
+                    onReadingTimeAdded = { elapsed -> viewModel.addReadingTime(book.id, elapsed) },
+                    readerTarget = state.readerTarget,
+                    onAnchorChanged = { chapter, anchor -> viewModel.updateAnchor(book.id, chapter, anchor) },
+                    onSaveBookmark = { viewModel.addBookmark(book.id, it) },
+                    onDeleteBookmark = { viewModel.deleteBookmark(book.id, it) }
                 )
             }
         }
+        if (showBackup) BackupSheet(state.backup, viewModel, onDismiss = { showBackup = false })
     }
 }

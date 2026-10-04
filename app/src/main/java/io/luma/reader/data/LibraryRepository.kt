@@ -1,5 +1,6 @@
 package io.luma.reader.data
 
+import android.content.ContentValues
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -17,6 +18,8 @@ import io.luma.reader.model.ReaderSettings
 import io.luma.reader.model.ReaderTheme
 import io.luma.reader.model.ReadingMode
 import io.luma.reader.model.ReaderAnnotation
+import io.luma.reader.model.ReadingAnchor
+import io.luma.reader.model.ReaderBookmark
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -26,19 +29,74 @@ class LibraryRepository(context: Context) {
     private val appContext = context.applicationContext
     private val preferences = appContext.getSharedPreferences("luma_library", Context.MODE_PRIVATE)
 
-    fun load(): LibrarySnapshot {
-        val raw = preferences.getString(KEY_STATE, null) ?: return LibrarySnapshot()
-        return runCatching { decode(JSONObject(raw)) }.getOrDefault(LibrarySnapshot())
+    private var lastSaved: LibrarySnapshot? = null
+
+    fun load(): LibrarySnapshot = synchronized(databaseLock) {
+        LibraryDatabase(appContext).use { helper ->
+            val db = helper.writableDatabase
+            val metadata = db.rawQuery("SELECT payload FROM metadata WHERE id=1", null).use {
+                if (it.moveToFirst()) it.getString(0) else null
+            }
+            val result = if (metadata == null) {
+                // Keep the old preference until migration has committed successfully.
+                val legacy = preferences.getString(KEY_STATE, null)
+                val snapshot = if (legacy == null) LibrarySnapshot() else decodeSnapshot(legacy)
+                writeSnapshot(db, snapshot, null)
+                snapshot
+            } else {
+                val json = JSONObject(metadata)
+                val books = JSONArray()
+                db.rawQuery("SELECT payload FROM books ORDER BY ordinal", null).use { cursor ->
+                    while (cursor.moveToNext()) books.put(JSONObject(cursor.getString(0)))
+                }
+                json.put("books", books)
+                decode(json)
+            }
+            lastSaved = result
+            result
+        }
     }
 
-    @Synchronized
-    fun save(snapshot: LibrarySnapshot) {
-        preferences.edit().putString(KEY_STATE, encode(snapshot).toString()).apply()
+    fun save(snapshot: LibrarySnapshot) = synchronized(databaseLock) {
+        LibraryDatabase(appContext).use { helper ->
+            writeSnapshot(helper.writableDatabase, snapshot, lastSaved)
+            lastSaved = snapshot
+        }
     }
+
+    private fun writeSnapshot(db: android.database.sqlite.SQLiteDatabase, snapshot: LibrarySnapshot, previous: LibrarySnapshot?) {
+        db.beginTransaction()
+        try {
+            val oldBooks = previous?.books?.associateBy { it.id }.orEmpty()
+            val ids = snapshot.books.map { it.id }.toSet()
+            db.rawQuery("SELECT id FROM books", null).use { cursor ->
+                val removed = mutableListOf<String>()
+                while (cursor.moveToNext()) if (cursor.getString(0) !in ids) removed += cursor.getString(0)
+                removed.forEach { db.delete("books", "id=?", arrayOf(it)) }
+            }
+            snapshot.books.forEachIndexed { index, book ->
+                if (oldBooks[book.id] != book || previous?.books?.getOrNull(index)?.id != book.id) {
+                    db.insertWithOnConflict("books", null, ContentValues().apply {
+                        put("id", book.id); put("payload", encodeBook(book).toString()); put("ordinal", index)
+                    }, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE).also { check(it != -1L) }
+                }
+            }
+            val metadata = snapshot.copy(books = emptyList())
+            if (previous == null || previous.copy(books = emptyList()) != metadata) {
+                db.insertWithOnConflict("metadata", null, ContentValues().apply {
+                    put("id", 1); put("payload", encode(metadata).toString())
+                }, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE).also { check(it != -1L) }
+            }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    internal fun encodeSnapshot(snapshot: LibrarySnapshot): String = encode(snapshot).toString()
+    internal fun decodeSnapshot(payload: String, checkFiles: Boolean = true): LibrarySnapshot = decode(JSONObject(payload), checkFiles)
 
     fun deleteBook(book: Book) {
         File(book.epubPath).parentFile?.takeIf {
-            it.canonicalPath.startsWith(File(appContext.filesDir, "library").canonicalPath)
+            it.canonicalPath.startsWith(File(appContext.filesDir, "library").canonicalPath + File.separator)
         }?.deleteRecursively()
     }
 
@@ -111,6 +169,14 @@ class LibraryRepository(context: Context) {
         put("review", book.review)
         put("rating", book.rating)
         put("readingTimeMillis", book.readingTimeMillis)
+        put("readingAnchor", book.readingAnchor?.let(::encodeAnchor))
+        put("bookmarks", JSONArray().apply { book.bookmarks.forEach { bookmark ->
+            put(JSONObject().apply {
+                put("id", bookmark.id); put("chapterIndex", bookmark.chapterIndex)
+                put("progress", bookmark.progress.toDouble()); put("anchor", bookmark.anchor?.let(::encodeAnchor))
+                put("label", bookmark.label); put("createdAt", bookmark.createdAt)
+            })
+        } })
         put("annotations", JSONArray().apply {
             book.annotations.forEach { annotation ->
                 put(JSONObject().apply {
@@ -134,9 +200,9 @@ class LibraryRepository(context: Context) {
         })
     }
 
-    private fun decode(json: JSONObject): LibrarySnapshot {
+    private fun decode(json: JSONObject, checkFiles: Boolean = true): LibrarySnapshot {
         val books = json.optJSONArray("books").mapObjects(::decodeBook)
-            .filter { File(it.epubPath).exists() && File(it.contentPath).exists() }
+            .filter { !checkFiles || (File(it.epubPath).isFile && File(it.contentPath).isDirectory) }
         val collections = json.optJSONArray("collections").mapObjects {
             BookCollection(it.getString("id"), it.getString("name"), it.optInt("color"))
         }
@@ -172,6 +238,11 @@ class LibraryRepository(context: Context) {
         review = json.optString("review"),
         rating = json.optInt("rating").coerceIn(0, 5),
         readingTimeMillis = json.optLong("readingTimeMillis").coerceAtLeast(0L),
+        readingAnchor = json.optJSONObject("readingAnchor")?.let(::decodeAnchor),
+        bookmarks = json.optJSONArray("bookmarks").mapObjects {
+            ReaderBookmark(it.getString("id"), it.optInt("chapterIndex"), it.optDouble("progress").toFloat().coerceIn(0f, 1f),
+                it.optJSONObject("anchor")?.let(::decodeAnchor), it.optString("label"), it.optLong("createdAt"))
+        },
         annotations = json.optJSONArray("annotations").mapObjects { item ->
             ReaderAnnotation(
                 id = item.optString("id", UUID.randomUUID().toString()),
@@ -187,6 +258,11 @@ class LibraryRepository(context: Context) {
             )
         }
     )
+
+    private fun encodeAnchor(anchor: ReadingAnchor) = JSONObject().apply {
+        put("blockIndex", anchor.blockIndex); put("offset", anchor.offset); put("text", anchor.text)
+    }
+    private fun decodeAnchor(json: JSONObject) = ReadingAnchor(json.optInt("blockIndex"), json.optInt("offset").coerceAtLeast(0), json.optString("text"))
 
     private fun encodeAppSettings(settings: AppSettings) = JSONObject().apply {
         put("themeMode", settings.themeMode.name)
@@ -263,6 +339,7 @@ class LibraryRepository(context: Context) {
     }
 
     companion object {
+        private val databaseLock = Any()
         private const val KEY_STATE = "library_state_v1"
     }
 }

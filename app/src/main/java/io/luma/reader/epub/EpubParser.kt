@@ -13,7 +13,7 @@ import java.io.InputStream
 import java.util.UUID
 import java.util.zip.ZipInputStream
 
-class EpubParser(private val context: Context) {
+class EpubParser(private val context: Context, private val extractionLimit: Long = 750L * 1024L * 1024L) {
     private data class ManifestItem(
         val id: String,
         val href: String,
@@ -28,7 +28,7 @@ class EpubParser(private val context: Context) {
 
         try {
             context.contentResolver.openInputStream(uri)?.use { input ->
-                epubFile.outputStream().use { output -> input.copyTo(output) }
+                epubFile.outputStream().use { output -> io.luma.reader.data.BackupRepository.copyLimited(input, output, 512L * 1024 * 1024) }
             } ?: error("No se pudo abrir el archivo.")
 
             val contentDir = File(bookDir, "content").apply { mkdirs() }
@@ -78,7 +78,7 @@ class EpubParser(private val context: Context) {
                             val read = zip.read(buffer)
                             if (read <= 0) break
                             totalBytes += read
-                            require(totalBytes <= 750L * 1024L * 1024L) {
+                            require(totalBytes <= extractionLimit) {
                                 "El EPUB descomprimido supera el límite de seguridad."
                             }
                             stream.write(buffer, 0, read)
