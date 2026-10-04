@@ -16,6 +16,7 @@ android {
         versionName = "1.9.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testProguardFiles("test-proguard-rules.pro")
         vectorDrawables.useSupportLibrary = true
     }
 
