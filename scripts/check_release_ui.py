@@ -105,9 +105,19 @@ def seed():
 def install_distribution():
     sdk = Path(os.environ['ANDROID_HOME'])
     signer = sdk / 'build-tools/35.0.0/apksigner'
+    # Android SDK installations can place the generated debug key outside HOME.
+    # Resolve the configured key from AGP instead of assuming a filesystem path.
+    report = subprocess.run(['./gradlew', '--no-daemon', '--max-workers=2', ':app:signingReport'],
+                            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            check=True, timeout=180).stdout
+    block = re.search(r'^Variant: debug\s*\n(.*?)(?=^Variant:|\Z)', report, re.MULTILINE | re.DOTALL)
+    match = re.search(r'^Store: (.+)$', block.group(1), re.MULTILINE) if block else None
+    if not match or not Path(match.group(1).strip()).is_file():
+        raise AssertionError('AGP did not report the generated debug keystore')
+    keystore = Path(match.group(1).strip())
     temporary = Path(os.environ.get('RUNNER_TEMP', '/tmp')) / 'nova-release-smoke.apk'
     try:
-        subprocess.run([str(signer), 'sign', '--ks', str(Path.home() / '.android/debug.keystore'),
+        subprocess.run([str(signer), 'sign', '--ks', str(keystore),
                         '--ks-key-alias', 'androiddebugkey', '--ks-pass', 'pass:android',
                         '--key-pass', 'pass:android', '--out', str(temporary),
                         'app/build/outputs/apk/release/app-release-unsigned.apk'], check=True)
@@ -136,6 +146,15 @@ def main():
              and any('Emilia' in text(child) for child in node.iter('node'))), None),
              'the distribution WebView did not render EPUB text')
     capture('release-lector')
+    # Reader controls hide after five seconds, including while accessibility
+    # waits for WebView content. Show them before locating the tools button.
+    root = window()
+    if not any('Buscar y marcadores' in text(n) for n in root.iter('node')):
+        view = next((n for n in root.iter('node')
+                     if n.get('class') == 'android.webkit.WebView'), None)
+        if view is None:
+            raise AssertionError('Release UI: reader WebView disappeared')
+        tap(view)
     tap(find('Buscar y marcadores'))
     find('Explorar el libro')
     capture('release-herramientas')
