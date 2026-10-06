@@ -1,0 +1,7 @@
+{
+  "releaseTag": "v1.9.1",
+  "assetName": "NovaReader-1.9.1.apk",
+  "legacyFixtureTag": "android-compatibility-fixture-v1.7.0",
+  "legacyFixtureAsset": "LumaReader-v1.7.0-debug.apk",
+  "payloadRef": "delivery/nova-reader-1.9.1"
+}

@@ -1,6 +1,8 @@
 # Nova Reader
 
-Nova Reader es una app Android local-first para organizar y leer EPUB 2 y EPUB 3.
+Nova Reader es una app Android para organizar y leer EPUB 2 y EPUB 3 sin conexión. Drive es opcional para guardar copias.
+
+La versión 1.9.1 se instala en paralelo con `io.nova.reader` y usa una nueva firma permanente. Descargar el APK firmado del release. Consulta [instalación y firma](docs/COMPILACION-Y-FIRMA.md) y [configurar Drive](docs/GOOGLE-DRIVE.md).
 
 ## Funciones incluidas
 
@@ -35,7 +37,7 @@ Nova Reader es una app Android local-first para organizar y leer EPUB 2 y EPUB 3
 - Brillo global desde 2% y oscurecimiento adicional para lectura nocturna.
 - Actividad local basada en tiempo real dentro del lector, con desglose por libro.
 - Caché privada: el EPUB y su contenido se copian al almacenamiento interno de la app.
-- Sin cuenta, anuncios, analítica ni conexión a Internet.
+- Lectura y diccionario sin cuenta, anuncios ni conexión; copias opcionales con la cuenta Google del usuario.
 
 ## Versión 1.8.0 — Diseño B
 
@@ -46,7 +48,7 @@ Las notas abren el libro en su posición guardada. El lector mantiene su funcion
 ## Versión 1.8.1
 
 Mantener pulsada una novela abre el mismo menú que los tres puntos, también en estantes y en Continuar leyendo.
-GitHub Actions compila y valida release y publica el APK y los informes. Sin la clave original, el APK publicado queda sin firma y no es instalable. Consulta [compilación y firma](docs/COMPILACION-Y-FIRMA.md).
+GitHub Actions compila y valida release y publica el APK y los informes. Las versiones 1.8.1 y 1.9.0 se publicaron sin firma. Desde 1.9.1 el release entregable usa la nueva firma permanente; un unsigned queda solo como artefacto de laboratorio. Consulta [compilación y firma](docs/COMPILACION-Y-FIRMA.md).
 
 ## Abrir y ejecutar
 
@@ -72,7 +74,7 @@ Para probar el rediseño junto a una instalación existente:
 ```
 
 El APK está en `app/build/outputs/apk/preview/app-preview.apk`.
-Esta variante se llama “Nova Reader · Prueba”, usa `io.luma.reader.preview` y guarda una biblioteca independiente.
+Esta variante se llama “Nova Reader · Prueba”, usa `io.nova.reader.preview` y guarda una biblioteca independiente.
 Para actualizar la app original conservando sus datos se debe usar su misma clave de firma.
 
 ## Compatibilidad y pruebas

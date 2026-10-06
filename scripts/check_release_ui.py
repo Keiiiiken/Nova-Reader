@@ -16,7 +16,8 @@ import time
 import xml.etree.ElementTree as ET
 from xml.sax.saxutils import escape
 
-PACKAGE = 'io.luma.reader'
+PACKAGE = 'io.nova.reader'
+ACTIVITY = 'io.luma.reader.MainActivity'
 OUTPUT = Path('screenshots')
 OUTPUT.mkdir(exist_ok=True)
 
@@ -131,7 +132,7 @@ def main():
     install_distribution()
     shell('input', 'keyevent', 'KEYCODE_WAKEUP')
     shell('wm', 'dismiss-keyguard')
-    shell('am', 'start', '-W', '-n', PACKAGE + '/.MainActivity')
+    shell('am', 'start', '-W', '-n', PACKAGE + '/' + ACTIVITY)
     book = find('El jardín de la luz')
     capture('release-biblioteca')
     tap(book, long=True)

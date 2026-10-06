@@ -2,7 +2,7 @@
 set -euo pipefail
 collect_captures() {
     mkdir -p screenshots
-    adb pull /sdcard/Android/data/io.luma.reader/files/screenshots screenshots/ || true
+    adb pull /sdcard/Android/data/io.nova.reader/files/screenshots screenshots/ || true
 }
 trap collect_captures EXIT
 ./gradlew --no-daemon --max-workers=2 connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true

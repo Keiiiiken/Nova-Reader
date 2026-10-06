@@ -1,0 +1,108 @@
+name: Signed APK installation and coexistence
+on:
+  push:
+    branches: [main]
+    paths: ['signing/install-request.json']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: signed-install-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  signed-install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
+      - name: Read delivery request
+        id: request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          request = json.loads(Path('signing/install-request.json').read_text())
+          pairs = [(request['releaseTag'], request['assetName']),
+                   (request['legacyFixtureTag'], request['legacyFixtureAsset'])]
+          needs_payload = False
+          for tag, name in pairs:
+              response = subprocess.check_output(['gh', 'release', 'view', tag, '--json', 'assets'], text=True)
+              if name not in [item['name'] for item in json.loads(response)['assets']]:
+                  needs_payload = True
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('payload_ref=' + request['payloadRef'] + '\n')
+              output.write('needs_payload=' + str(needs_payload).lower() + '\n')
+          PY
+      - uses: actions/checkout@v4
+        if: steps.request.outputs.needs_payload == 'true'
+        with:
+          ref: ${{ steps.request.outputs.payload_ref }}
+          path: signed-payload
+      - name: Reconstruct the signed distribution and original compatibility fixture
+        if: steps.request.outputs.needs_payload == 'true'
+        run: |
+          python3 - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root = Path('signed-payload')
+          manifest = json.loads((root / 'manifest.json').read_text())
+          Path('candidate').mkdir()
+          for entry in manifest['files']:
+              contents = b''.join((root / part).read_bytes() for part in entry['parts'])
+              assert hashlib.sha256(contents).hexdigest() == entry['sha256'], entry['name']
+              (Path('candidate') / entry['name']).write_bytes(contents)
+          PY
+      - name: Download previously verified release files
+        if: steps.request.outputs.needs_payload == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          request = json.loads(Path('signing/install-request.json').read_text())
+          for tag, asset in [(request['releaseTag'], request['assetName']), (request['legacyFixtureTag'], request['legacyFixtureAsset'])]:
+              subprocess.run(['gh', 'release', 'download', tag, '--pattern', asset, '--dir', 'candidate'], check=True)
+          PY
+      - name: Free disk and enable KVM
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install build tools
+        run: sdkmanager 'build-tools;35.0.0'
+      - name: Verify certificate, install, reinstall, launch and preserve legacy data
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disk-size: 4096M
+          ram-size: 2048M
+          emulator-boot-timeout: 300
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: python3 scripts/check_signed_install.py candidate/NovaReader-1.9.1.apk --legacy-apk candidate/LumaReader-v1.7.0-debug.apk
+      - name: Attach the verified signed APK to its draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload v1.9.1 candidate/NovaReader-1.9.1.apk screenshots/signed-install-result.json --clobber
+          gh release upload android-compatibility-fixture-v1.7.0 candidate/LumaReader-v1.7.0-debug.apk --clobber
+      - name: Upload signed installation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Signed-APK-installation
+          path: screenshots/

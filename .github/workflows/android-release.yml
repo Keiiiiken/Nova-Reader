@@ -96,35 +96,44 @@ jobs:
       - name: Prepare APK
         id: apk
         env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          NOVA_SIGNING_BUNDLE: ${{ secrets.NOVA_SIGNING_BUNDLE }}
         run: |
           set -euo pipefail
           version=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
           mkdir -p release
-          unsigned=app/build/outputs/apk/release/app-release-unsigned.apk
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            : "${STORE_PASSWORD:?Missing keystore password}" "${KEY_ALIAS:?Missing key alias}" "${KEY_PASSWORD:?Missing key password}"
-            keyfile="$RUNNER_TEMP/reader-signing.keystore"
-            trap 'rm -f "$keyfile"' EXIT
-            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$keyfile"
-            "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign --ks "$keyfile" --ks-key-alias "$KEY_ALIAS" --ks-pass env:STORE_PASSWORD --key-pass env:KEY_PASSWORD --out "release/NovaReader-$version.apk" "$unsigned"
-            certificate=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "release/NovaReader-$version.apk" | sed -n 's/Signer #1 certificate SHA-256 digest: //p')
-            if [ "$certificate" != 'a25061d76d480e6e68eeb75d2fd823eb3657e6d8c50793ffcd090f6a4e1f8727' ]; then
-              echo 'The signing certificate does not match LumaReader-v1.7.0. Update compatibility cannot be guaranteed.' >&2
-              exit 1
-            fi
+          if [ -n "$NOVA_SIGNING_BUNDLE" ]; then
+            python3 scripts/sign_release.py app/build/outputs/apk/release/app-release-unsigned.apk "release/NovaReader-$version.apk"
             echo 'signed=true' >> "$GITHUB_OUTPUT"
-            printf '%s\n' 'APK firmado con la clave de la versión 1.7.0. Conserva el identificador io.luma.reader.' > release/NOTAS.md
+            printf '%s\n' 'APK firmado con la clave permanente de Nova Reader. Paquete io.nova.reader; se instala junto a la app anterior y conserva sus datos independientes.' > release/NOTAS.md
           else
-            cp "$unsigned" "release/NovaReader-$version-unsigned.apk"
+            cp app/build/outputs/apk/release/app-release-unsigned.apk "release/NovaReader-$version-unsigned.apk"
             echo 'signed=false' >> "$GITHUB_OUTPUT"
-            printf '%s\n' 'Compilación release validada, todavía SIN FIRMA. Este APK no se puede instalar hasta firmarlo con la clave original. No desinstales la versión anterior: su biblioteca es local.' > release/NOTAS.md
+            printf '%s\n' 'Solo artefacto de compilación sin firma. No es instalable y no se publica como release. Configurar NOVA_SIGNING_BUNDLE según docs/COMPILACION-Y-FIRMA.md.' > release/NOTAS.md
+            echo '::notice::Build validated. Automatic signing requires NOVA_SIGNING_BUNDLE; unsigned APKs are not published as releases.'
           fi
-          printf '\n%s\n' 'Cambios: diccionario español sin conexión, búsqueda en todo el libro, marcadores, posiciones de texto, notas navegables, copias locales y soporte opcional de Drive appDataFolder. SQLite y lectura de capítulos en segundo plano. Drive requiere configurar el cliente OAuth Android; consulta docs/GOOGLE-DRIVE.md.' >> release/NOTAS.md
+          printf '\n%s\n' 'Drive requiere configurar el cliente OAuth Android para io.nova.reader y el SHA-1 de signing/release-certificate.json; consulta docs/GOOGLE-DRIVE.md.' >> release/NOTAS.md
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Enable KVM for signed installation
+        if: steps.apk.outputs.signed == 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and launch signed distribution
+        if: steps.apk.outputs.signed == 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          disk-size: 4096M
+          ram-size: 2048M
+          emulator-boot-timeout: 300
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: python3 scripts/check_signed_install.py release/NovaReader-${{ steps.apk.outputs.version }}.apk --unsigned-reference app/build/outputs/apk/release/app-release-unsigned.apk
       - uses: actions/upload-artifact@v4
         with:
           name: NovaReader-${{ steps.apk.outputs.version }}
@@ -132,7 +141,9 @@ jobs:
             release/
             app/build/reports/lint-results-release.html
             app/build/reports/tests/testReleaseUnitTest/
+            screenshots/
       - name: Publish GitHub release
+        if: steps.apk.outputs.signed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.apk.outputs.version }}
