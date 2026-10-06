@@ -26,7 +26,7 @@ def main():
         encoded = os.environ.get('NOVA_SIGNING_BUNDLE')
         if not encoded:
             raise SystemExit('Missing NOVA_SIGNING_BUNDLE: APK will not be published unsigned.')
-        credentials = json.loads(base64.b64decode(encoded, validate=True))
+        credentials = json.loads(base64.b64decode(encoded.strip(), validate=True))
         key_bytes = base64.b64decode(credentials['keystoreBase64'], validate=True)
     environment = dict(os.environ,
                        NOVA_STORE_PASSWORD=credentials['storePassword'],
