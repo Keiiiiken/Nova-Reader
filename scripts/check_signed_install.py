@@ -93,7 +93,23 @@ def main():
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             shell('uiautomator', 'dump', '/sdcard/nova-signed-install.xml')
-            root = ET.fromstring(adb('exec-out', 'cat', '/sdcard/nova-signed-install.xml'))
+            xml = adb('exec-out', 'cat', '/sdcard/nova-signed-install.xml')
+            (OUTPUT / 'signed-install-last-window.xml').write_bytes(xml)
+            root = ET.fromstring(xml)
+            # A cold stock image can show a launcher ANR above the app. Dismiss
+            # only that system dialog; a Nova Reader ANR must still fail.
+            if any(n.get('package') == 'android' and
+                   n.get('text') == "Pixel Launcher isn't responding"
+                   for n in root.iter('node')):
+                close = next((n for n in root.iter('node') if n.get('text') == 'Close app'), None)
+                bounds = re.findall(r'\d+', close.get('bounds', '')) if close is not None else []
+                if len(bounds) != 4:
+                    raise AssertionError('Cannot close the stock launcher ANR dialog')
+                x1, y1, x2, y2 = map(int, bounds)
+                shell('input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
+                print('Dismissed the stock Pixel Launcher ANR dialog.')
+                shell('am', 'start', '-W', '-n', package + '/' + activity.group(1))
+                continue
             if any(n.get('package') == package and n.get('text') == 'Biblioteca'
                    for n in root.iter('node')):
                 break
@@ -121,4 +137,6 @@ if __name__ == '__main__':
         main()
     except Exception:
         capture('release-firmado-fallo')
+        (OUTPUT / 'signed-install-crash-log.txt').write_bytes(
+            adb('logcat', '-d', '-s', 'AndroidRuntime:E'))
         raise
