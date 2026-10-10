@@ -9,12 +9,14 @@ trap collect_captures EXIT
 # during tests. Its ANR dialog steals focus from the app (including Espresso's
 # back action). Disable only that setup package; keep Google Play services and
 # all Nova Reader assertions enabled.
-setup_package=com.google.android.googlesetup
+setup_package=com.google.android.googlesdksetup
 if adb shell pm list packages "$setup_package" | tr -d '\r' | grep -Fxq "package:$setup_package"; then
     adb shell am force-stop "$setup_package"
     disabled=$(adb shell pm disable-user --user 0 "$setup_package" | tr -d '\r')
     printf '%s\n' "$disabled"
     [[ "$disabled" == *'new state: disabled-user'* ]]
+else
+    printf 'Emulator setup package %s is not installed.\n' "$setup_package"
 fi
 ./gradlew --no-daemon --max-workers=2 connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
 collect_captures
