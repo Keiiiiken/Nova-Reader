@@ -12,6 +12,11 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -22,6 +27,7 @@ import io.luma.reader.BackupUiState
 
 @Composable
 internal fun SettingsHeader(title: String, subtitle: String, onClose: () -> Unit, closeTag: String) {
+    MatchSheetSystemBars()
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
@@ -109,6 +115,22 @@ internal fun SettingsSectionTabs(
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
             }
+        }
+    }
+}
+
+// Material 3 1.3 derives dialog system-bar icons from the device theme only.
+// Follow Nova Reader's selected theme, including changes while the sheet is open.
+@Composable
+internal fun MatchSheetSystemBars() {
+    val view = LocalView.current
+    val darkIcons = MaterialTheme.colorScheme.background.luminance() > .5f
+    SideEffect {
+        val window = generateSequence(view) { it.parent as? android.view.View }
+            .filterIsInstance<DialogWindowProvider>().firstOrNull()?.window
+        if (window != null) WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = darkIcons
+            isAppearanceLightNavigationBars = darkIcons
         }
     }
 }

@@ -40,10 +40,18 @@ def capture(name):
 
 
 def window():
+    # A dump may fail while Android is attaching a new window. Remove the
+    # previous dump so a retry can never accept a stale screen.
+    shell('rm', '-f', '/sdcard/nova-release-smoke.xml')
     shell('uiautomator', 'dump', '/sdcard/nova-release-smoke.xml')
     xml = adb('exec-out', 'cat', '/sdcard/nova-release-smoke.xml')
     (OUTPUT / 'release-smoke-last-window.xml').write_bytes(xml)
-    return ET.fromstring(xml)
+    try:
+        return ET.fromstring(xml)
+    except ET.ParseError:
+        # wait_for still requires the requested UI within its existing deadline.
+        # Missing/incomplete dumps are transient observations, not a passing check.
+        return ET.Element('hierarchy')
 
 
 def text(node):

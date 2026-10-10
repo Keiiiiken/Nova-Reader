@@ -69,6 +69,7 @@ class LibraryDesignTest {
         compose.onNodeWithTag("settings_tab_1").performClick()
         compose.onNodeWithTag("general_settings_sheet").performScrollToNode(hasText("2 libros"))
         compose.onNodeWithText("2 libros").performClick()
+        screenshot("ajustes-biblioteca")
         compose.onNodeWithTag("close_settings").performClick()
         compose.onNodeWithContentDescription("Limpiar búsqueda").performClick()
         screenshot("biblioteca-oscura-dos-columnas")
@@ -175,6 +176,7 @@ class LibraryDesignTest {
         compose.onNodeWithContentDescription("Abrir ajustes generales").performClick()
         screenshot("ajustes-renovados")
         compose.onNodeWithTag("settings_tab_2").performClick()
+        screenshot("ajustes-herramientas")
         compose.onNodeWithTag("general_settings_sheet").performScrollToNode(hasText("Copias de seguridad y Google Drive"))
         compose.onNodeWithText("Copias de seguridad y Google Drive").performClick()
         compose.waitUntilAtLeastOneExists(hasTestTag("backup_sheet"), 10_000)
@@ -202,6 +204,9 @@ class LibraryDesignTest {
 
     private fun screenshot(name: String) {
         compose.waitForIdle()
+        // Compose semantics can be ready one frame before the system screenshot.
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        android.os.SystemClock.sleep(350)
         val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
         val directory = File(context.getExternalFilesDir(null), "screenshots").apply { mkdirs() }
         File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }

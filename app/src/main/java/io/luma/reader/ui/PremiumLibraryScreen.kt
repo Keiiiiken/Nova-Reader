@@ -620,7 +620,7 @@ private fun BookCover(book: Book, modifier: Modifier = Modifier, compact: Boolea
                 drawLine(Color(0xFF344054).copy(alpha = .12f), Offset(5.dp.toPx(), 0f),
                     Offset(5.dp.toPx(), size.height), strokeWidth = 1.dp.toPx())
             }
-            Column(Modifier.fillMaxSize().padding(if (compact) 12.dp else 18.dp),
+            Column(Modifier.fillMaxSize().padding(if (thumbnail) 5.dp else if (compact) 12.dp else 18.dp),
                 verticalArrangement = if (thumbnail) Arrangement.Center else Arrangement.SpaceBetween,
                 horizontalAlignment = if (thumbnail) Alignment.CenterHorizontally else Alignment.Start) {
                 if (!thumbnail) Icon(Icons.Default.AutoStories, null, tint = Color(0xFF475467), modifier = Modifier.size(16.dp))
@@ -904,6 +904,7 @@ private fun BookActionSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = MaterialTheme.colorScheme.background
     ) {
+        MatchSheetSystemBars()
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 BookCover(book, Modifier.width(74.dp).height(108.dp), compact = true)
