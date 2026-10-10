@@ -18,7 +18,7 @@ La versión 1.9.1 se instala en paralelo con `io.nova.reader` y usa una nueva fi
 - Zoom por pellizco para ilustraciones, mapas y páginas maquetadas dentro del EPUB.
 - Ajustes generales para toda la aplicación desde el menú superior derecho, separados de los ajustes de lectura.
 - Ajustes independientes por novela, con opción para volver a usar los generales.
-- Panel de ajustes a media pantalla dentro del lector para ver los cambios en vivo.
+- Panel de ajustes del lector que abre a media pantalla para ver los cambios en vivo y se amplía al deslizar hacia arriba sobre los controles; también permite ampliar o reducir con un botón.
 - Diez temas de lectura: papel, sepia, arena, menta, lavanda, rosa, cielo, pizarra, noche y OLED.
 - Ocho familias tipográficas y tamaño, interlineado, márgenes, alineación y modo paginado o desplazamiento.
 - Estantes como una sección independiente, con vista propia de sus libros y navegación de regreso.
@@ -92,7 +92,7 @@ Las pruebas instrumentadas en Android 15 cubren:
 - Copia y validación de portadas personalizadas.
 - Persistencia separada de ajustes globales y ajustes por novela.
 - Acceso a los ajustes generales desde el menú superior.
-- Altura del panel de ajustes por novela para conservar la vista en vivo.
+- Apertura a media altura, expansión al deslizar sobre los controles, cambio de pestaña, reducción y cierre del panel de ajustes por novela.
 - Persistencia de la densidad de biblioteca y del tiempo real de lectura.
 - Persistencia del filtro de estantería, oscurecimiento nocturno y ritmo detallado de TTS.
 - Resaltado y desplazamiento del párrafo activo durante la narración.
@@ -119,3 +119,9 @@ Biblioteca con tarjeta destacada para continuar, portadas tipográficas con deta
 Consulta [las prioridades pendientes](docs/PRIORIDADES-APP.md) para distinguir las mejoras propuestas de las funciones que ya existen.
 
 [Capturas y validación de 1.9.4](docs/VALIDACION-1.9.4.md).
+
+## Versión 1.9.5
+
+Los ajustes del lector mantienen la apertura a media pantalla y se amplían al deslizar hacia arriba dentro de los controles. El botón de la cabecera permite ampliar o reducir el panel; cambiar de pestaña conserva su altura. Cabecera, pestañas, temas y tarjetas más compactos para mostrar más opciones a la vez.
+
+[Capturas y validación de 1.9.5](docs/VALIDACION-1.9.5.md).
