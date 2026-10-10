@@ -357,15 +357,12 @@ private fun LibraryDashboard(
         } }.toList() }
     val continueBook = remember(visibleLibraryBooks) { visibleLibraryBooks.filter { it.progress in .001f..0.995f }.maxByOrNull { it.lastOpenedAt } }
     val columns = state.library.appSettings.libraryColumns.coerceIn(2, 3)
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(columns),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxSize().statusBarsPadding().testTag("library_grid")
-    ) {
-        item(span = { GridItemSpan(maxLineSpan) }) { BrandHeader(onSettings) }
-        item(span = { GridItemSpan(maxLineSpan) }) {
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            LibraryHeader(query, onQuery, onSettings, onImport)
             Column {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
                     item { FilterPill("Todos", filter == FILTER_ALL) { onFilter(FILTER_ALL) } }
@@ -376,72 +373,87 @@ private fun LibraryDashboard(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.weight(1f)) { SearchBar(query, onQuery) }
-                TextButton(onClick = onImport) {
-                    Icon(Icons.Default.Add, null, Modifier.size(20.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("Importar")
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(columns),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth().weight(1f).testTag("library_grid")
+        ) {
+            if (state.library.books.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) { EditorialEmptyState(onImport) }
+            } else {
+                if (continueBook != null && filter == FILTER_ALL && query.isBlank()) {
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Column {
+                            Text("Seguir leyendo", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.height(12.dp))
+                            ContinueReadingCard(continueBook, { onOpenBook(continueBook.id) }, { onBookOptions(continueBook) })
+                        }
+                    }
                 }
-            }
-        }
-        if (state.library.books.isEmpty()) {
-            item(span = { GridItemSpan(maxLineSpan) }) { EditorialEmptyState(onImport) }
-        } else {
-            if (continueBook != null && filter == FILTER_ALL && query.isBlank()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
-                    Column {
-                        Text("Seguir leyendo", style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.height(12.dp))
-                        ContinueReadingCard(continueBook, { onOpenBook(continueBook.id) }, { onBookOptions(continueBook) })
-                    }
-                }
-            }
-            item(span = { GridItemSpan(maxLineSpan) }) {
-                SectionTitle("Libros", "${books.size}") {
-                    Box {
-                        TextButton(onClick = { onToggleSort(true) }) {
-                            Text(state.library.sort.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Icon(Icons.Default.KeyboardArrowDown, "Ordenar", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        DropdownMenu(showSort, { onToggleSort(false) }) {
-                            LibrarySort.entries.forEach { sort ->
-                                DropdownMenuItem(text = { Text(sort.label) },
-                                    trailingIcon = { if (sort == state.library.sort) Icon(Icons.Default.Check, null) },
-                                    onClick = { onSort(sort); onToggleSort(false) })
+                    SectionTitle("Libros", "${books.size}") {
+                        Box {
+                            TextButton(onClick = { onToggleSort(true) }) {
+                                Text(state.library.sort.label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Icon(Icons.Default.KeyboardArrowDown, "Ordenar", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("Incluir libros en estantes") },
-                                trailingIcon = { if (state.library.appSettings.includeShelvedBooks) Icon(Icons.Default.Check, null) },
-                                onClick = {
-                                    onAppSettingsChanged(state.library.appSettings.copy(includeShelvedBooks = !state.library.appSettings.includeShelvedBooks))
-                                    onToggleSort(false)
-                                })
+                            DropdownMenu(showSort, { onToggleSort(false) }) {
+                                LibrarySort.entries.forEach { sort ->
+                                    DropdownMenuItem(text = { Text(sort.label) },
+                                        trailingIcon = { if (sort == state.library.sort) Icon(Icons.Default.Check, null) },
+                                        onClick = { onSort(sort); onToggleSort(false) })
+                                }
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = { Text("Incluir libros en estantes") },
+                                    trailingIcon = { if (state.library.appSettings.includeShelvedBooks) Icon(Icons.Default.Check, null) },
+                                    onClick = {
+                                        onAppSettingsChanged(state.library.appSettings.copy(includeShelvedBooks = !state.library.appSettings.includeShelvedBooks))
+                                        onToggleSort(false)
+                                    })
+                            }
                         }
                     }
                 }
-            }
-            if (books.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { NoResults(query) }
-            else gridItems(books, key = { it.id }) { book ->
-                ModernBookCard(book, columns == 3, { onOpenBook(book.id) }, { onBookOptions(book) })
+                if (books.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) { NoResults(query) }
+                else gridItems(books, key = { it.id }) { book ->
+                    ModernBookCard(book, columns == 3, { onOpenBook(book.id) }, { onBookOptions(book) })
+                }
             }
         }
     }
 }
 
 @Composable
-private fun BrandHeader(onSettings: () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("NOVA READER", fontSize = 11.sp, letterSpacing = 2.sp,
-                fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            IconButton(onClick = onSettings) {
-                Icon(Icons.Default.MoreHoriz, "Abrir ajustes generales", tint = MaterialTheme.colorScheme.onSurface)
-            }
+private fun LibraryHeader(
+    query: String,
+    onQuery: (String) -> Unit,
+    onSettings: () -> Unit,
+    onImport: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(Modifier.weight(1f)) { SearchBar(query, onQuery) }
+        IconButton(onClick = onSettings) {
+            Icon(Icons.Default.MoreHoriz, "Abrir ajustes generales", tint = MaterialTheme.colorScheme.onSurface)
         }
-        Text("Biblioteca", style = MaterialTheme.typography.displaySmall)
+    }
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("NOVA READER", fontSize = 11.sp, letterSpacing = 2.sp,
+                fontWeight = FontWeight.SemiBold)
+            Text("Biblioteca", style = MaterialTheme.typography.headlineMedium)
+        }
+        TextButton(onClick = onImport) {
+            Icon(Icons.Default.Add, null, Modifier.size(20.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("Importar")
+        }
     }
 }
 
