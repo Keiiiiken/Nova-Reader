@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -136,8 +137,14 @@ internal fun ReaderSettingsSheet(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("Este libro", style = MaterialTheme.typography.titleLarge)
-                            Text(if (isBookOverride) "Ajustes personalizados" else "Vista previa de lectura",
+                            Text(if (isBookOverride) "Personalizados" else "Vista previa",
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (isBookOverride && onUseGlobalSettings != null) {
+                            TextButton(onClick = onUseGlobalSettings, modifier = Modifier.widthIn(max = 104.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp)) {
+                                Text("Usar generales", style = MaterialTheme.typography.labelMedium)
+                            }
                         }
                         val expanded = sheetState.targetValue == SheetValue.Expanded
                         IconButton(onClick = {
@@ -156,9 +163,6 @@ internal fun ReaderSettingsSheet(
                 } else {
                     SettingsHeader("Tu forma de leer", "Preferencias para los libros sin ajustes propios.",
                         onDismiss, "close_reader_settings")
-                }
-                if (compactPreview && isBookOverride && onUseGlobalSettings != null) {
-                    TextButton(onClick = onUseGlobalSettings, contentPadding = PaddingValues(horizontal = 0.dp)) { Text("Usar generales") }
                 }
             }
 
