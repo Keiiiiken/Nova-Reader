@@ -673,7 +673,8 @@ private fun DropdownSetting(
     onSelected: (Choice) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurface) {
         Column(Modifier.padding(16.dp)) {
             SettingLabel(label)
             Box {
@@ -727,7 +728,8 @@ private fun SettingSlider(
     steps: Int,
     onChange: (Float) -> Unit
 ) {
-    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurface) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
