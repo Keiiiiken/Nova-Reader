@@ -227,26 +227,41 @@ class ReaderInteractionTest {
     }
 
     @Test
-    fun novelSettingsUseOnlyTheLowerHalfForLivePreview() {
+    fun novelSettingsOpenHalfwayAndExpandBeforeScrolling() {
         val book = seedLibrary(ReadingMode.SCROLL)
         launchAndOpen(book)
-
         compose.onNodeWithContentDescription("Apariencia").performClick()
+        compose.waitUntilAtLeastOneExists(hasTestTag("novel_settings_sheet"), 8_000)
         compose.waitForIdle()
-
-        val sheetBounds = compose.onNodeWithTag("novel_settings_sheet")
-            .assertExists()
-            .fetchSemanticsNode()
-            .boundsInRoot
         val screenHeight = context.resources.displayMetrics.heightPixels.toFloat()
-        assertTrue(
-            "El panel de la novela debe ocupar al menos 45% de la pantalla",
-            sheetBounds.height >= screenHeight * .45f
-        )
-        assertTrue(
-            "El panel de la novela no debe superar 62% de la pantalla",
-            sheetBounds.height <= screenHeight * .62f
-        )
+        fun sheetTop() = compose.onNodeWithTag("novel_settings_sheet").fetchSemanticsNode().boundsInRoot.top
+        assertTrue("Al abrir debe quedar aproximadamente media página visible", sheetTop() in screenHeight * .40f..screenHeight * .62f)
+        screenshot("ajustes-lector-mitad")
+
+        // Start inside the visible controls, not on the drag handle. Nested scroll
+        // should spend the upward gesture expanding the sheet before scrolling.
+        val options = compose.onNodeWithTag("reader_appearance_options")
+        val optionsTop = options.fetchSemanticsNode().boundsInRoot.top
+        options.performTouchInput {
+            swipeUp(startY = minOf(height.toFloat(), screenHeight - optionsTop) - 24f,
+                endY = 16f, durationMillis = 500)
+        }
+        compose.waitUntil(8_000) { sheetTop() < screenHeight * .22f }
+        compose.onNodeWithContentDescription("Reducir ajustes").assertExists()
+        options.performScrollToNode(hasText("Interlineado"))
+        compose.onNodeWithText("Interlineado").assertExists()
+        screenshot("ajustes-lector-ampliados")
+
+        compose.onNodeWithTag("reader_settings_tab_1").performClick()
+        compose.onNodeWithTag("reader_behavior_options").assertExists()
+        assertTrue("Cambiar de pestaña conserva el panel ampliado", sheetTop() < screenHeight * .22f)
+        compose.onNodeWithContentDescription("Reducir ajustes").performClick()
+        compose.waitUntil(8_000) { sheetTop() > screenHeight * .40f }
+        compose.onNodeWithContentDescription("Expandir ajustes").performClick()
+        compose.waitUntil(8_000) { sheetTop() < screenHeight * .22f }
+        compose.onNodeWithTag("close_reader_settings").performClick()
+        compose.waitUntilDoesNotExist(hasTestTag("novel_settings_sheet"), 8_000)
+        compose.onNodeWithTag("epub_content").assertExists()
     }
 
     @Test
@@ -317,6 +332,9 @@ class ReaderInteractionTest {
     }
 
     private fun screenshot(name: String) {
+        compose.waitForIdle()
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().waitForIdleSync()
+        android.os.SystemClock.sleep(350)
         val automation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
         automation.serviceInfo = automation.serviceInfo.apply {
             flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS

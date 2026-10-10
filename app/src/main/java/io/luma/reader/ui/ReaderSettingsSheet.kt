@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -27,6 +28,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoStories
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.FormatColorText
 import androidx.compose.material.icons.filled.Language
@@ -44,6 +48,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -58,6 +64,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +81,7 @@ import io.luma.reader.model.ReaderFont
 import io.luma.reader.model.ReaderSettings
 import io.luma.reader.model.ReaderTheme
 import io.luma.reader.model.ReadingMode
+import kotlinx.coroutines.launch
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -99,12 +107,14 @@ internal fun ReaderSettingsSheet(
 ) {
     var tab by remember { mutableStateOf(SettingsTab.APPEARANCE) }
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-    // The content determines the sheet height so Material can keep it anchored
-    // to the bottom. Constraining ModalBottomSheet itself places it at the top.
-    val contentHeight = screenHeight * if (compactPreview) .50f else .86f
+    // A tall content area gives Material real partial/expanded anchors. Its
+    // nested scroll connection expands the panel before scrolling the controls.
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = !compactPreview)
+    val scope = rememberCoroutineScope()
+    val contentHeight = screenHeight * .90f
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        sheetState = sheetState,
         scrimColor = if (compactPreview) Color.Black.copy(alpha = .12f)
         else Color.Black.copy(alpha = .32f),
         shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
@@ -120,25 +130,41 @@ internal fun ReaderSettingsSheet(
                     else "general_settings_sheet"
                 )
         ) {
-            Column(Modifier.padding(horizontal = 22.dp, vertical = 8.dp)) {
-                SettingsHeader(
-                    title = if (compactPreview) "Este libro" else "Tu forma de leer",
-                    subtitle = when {
-                        compactPreview && isBookOverride -> "Personalizados solo para este libro."
-                        compactPreview -> "Tus cambios se aplicarán solo a este libro."
-                        else -> "Preferencias para los libros sin ajustes propios."
-                    },
-                    onClose = onDismiss,
-                    closeTag = "close_reader_settings"
-                )
+            MatchSheetSystemBars()
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+                if (compactPreview) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Este libro", style = MaterialTheme.typography.titleLarge)
+                            Text(if (isBookOverride) "Ajustes personalizados" else "Vista previa de lectura",
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        val expanded = sheetState.targetValue == SheetValue.Expanded
+                        IconButton(onClick = {
+                            scope.launch {
+                                if (expanded && sheetState.hasPartiallyExpandedState) sheetState.partialExpand()
+                                else sheetState.expand()
+                            }
+                        }, modifier = Modifier.testTag("resize_reader_settings")) {
+                            Icon(if (expanded) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+                                if (expanded) "Reducir ajustes" else "Expandir ajustes")
+                        }
+                        IconButton(onClick = onDismiss, modifier = Modifier.testTag("close_reader_settings")) {
+                            Icon(Icons.Default.Close, "Cerrar ajustes de lectura")
+                        }
+                    }
+                } else {
+                    SettingsHeader("Tu forma de leer", "Preferencias para los libros sin ajustes propios.",
+                        onDismiss, "close_reader_settings")
+                }
                 if (compactPreview && isBookOverride && onUseGlobalSettings != null) {
-                    TextButton(onClick = onUseGlobalSettings) { Text("Usar generales") }
+                    TextButton(onClick = onUseGlobalSettings, contentPadding = PaddingValues(horizontal = 0.dp)) { Text("Usar generales") }
                 }
             }
 
             SettingsSectionTabs(SettingsTab.entries.map { it.label },
                 listOf(Icons.Default.FormatColorText, Icons.Default.AutoStories, Icons.Default.SettingsVoice),
-                tab.ordinal, { tab = SettingsTab.entries[it] }, "reader_settings_tab")
+                tab.ordinal, { tab = SettingsTab.entries[it] }, "reader_settings_tab", compact = true)
 
             when (tab) {
                 SettingsTab.APPEARANCE -> AppearanceSettings(settings, onSettingsChanged)
@@ -160,9 +186,9 @@ private fun AppearanceSettings(
     onChanged: (ReaderSettings) -> Unit
 ) {
     LazyColumn(
-        contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-        modifier = Modifier.fillMaxSize()
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize().testTag("reader_appearance_options")
     ) {
         item {
             SettingLabel("Tema")
@@ -245,9 +271,9 @@ private fun ReadingBehaviorSettings(
     onExtraDimChanged: ((Float) -> Unit)?
 ) {
     LazyColumn(
-        contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-        modifier = Modifier.fillMaxSize()
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize().testTag("reader_behavior_options")
     ) {
         item {
             SettingLabel("Modo de lectura")
@@ -403,9 +429,9 @@ private fun VoiceSettings(
     }
 
     LazyColumn(
-        contentPadding = PaddingValues(start = 22.dp, end = 22.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-        modifier = Modifier.fillMaxSize()
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize().testTag("reader_voice_options")
     ) {
         item {
             DropdownSetting(
@@ -594,9 +620,9 @@ private fun ReadingModeCard(
         border = if (selected) {
             androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
         } else null,
-        modifier = modifier.height(132.dp)
+        modifier = modifier.heightIn(min = 110.dp)
     ) {
-        Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp)) {
             icon()
             Spacer(Modifier.height(10.dp))
             Text(title, style = MaterialTheme.typography.titleMedium)
@@ -625,10 +651,10 @@ private fun ThemeOption(
         border = if (selected) {
             androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
         } else null,
-        modifier = Modifier.width(100.dp).height(80.dp)
+        modifier = Modifier.width(88.dp).height(64.dp)
     ) {
-        Box(Modifier.fillMaxSize().padding(10.dp)) {
-            Text("Aa", color = foreground, style = MaterialTheme.typography.titleLarge)
+        Box(Modifier.fillMaxSize().padding(8.dp)) {
+            Text("Aa", color = foreground, style = MaterialTheme.typography.titleMedium)
             Text(
                 theme.label,
                 color = foreground,
@@ -651,7 +677,7 @@ private fun DropdownSetting(
     Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         contentColor = MaterialTheme.colorScheme.onSurface) {
-        Column(Modifier.padding(16.dp)) {
+        Column(Modifier.padding(12.dp)) {
             SettingLabel(label)
             Box {
                 OutlinedButton(
@@ -691,7 +717,7 @@ private fun SettingLabel(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.padding(bottom = 8.dp)
+        modifier = Modifier.padding(bottom = 6.dp)
     )
 }
 
@@ -707,12 +733,12 @@ private fun SettingSlider(
     Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         contentColor = MaterialTheme.colorScheme.onSurface) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(10.dp)) {
                     Text(valueLabel, color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                        style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                 }
             }
             Slider(value = value, onValueChange = onChange, valueRange = range, steps = steps)

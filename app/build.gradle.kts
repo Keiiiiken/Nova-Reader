@@ -12,8 +12,8 @@ android {
         applicationId = "io.nova.reader"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "1.9.4"
+        versionCode = 17
+        versionName = "1.9.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         testProguardFiles("test-proguard-rules.pro")

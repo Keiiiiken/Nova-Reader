@@ -95,9 +95,9 @@ internal fun BackupProgress(state: BackupUiState, onOpen: (() -> Unit)? = null) 
 @Composable
 internal fun SettingsSectionTabs(
     labels: List<String>, icons: List<ImageVector>, selected: Int, onSelected: (Int) -> Unit,
-    tagPrefix: String
+    tagPrefix: String, compact: Boolean = false
 ) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 10.dp)
+    Row(Modifier.fillMaxWidth().padding(horizontal = if (compact) 20.dp else 22.dp, vertical = if (compact) 4.dp else 10.dp)
         .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp)).padding(5.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         labels.forEachIndexed { index, label ->
@@ -105,10 +105,10 @@ internal fun SettingsSectionTabs(
             Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
                 .background(if (active) MaterialTheme.colorScheme.surface else androidx.compose.ui.graphics.Color.Transparent)
                 .selectable(active, role = androidx.compose.ui.semantics.Role.Tab, onClick = { onSelected(index) })
-                .testTag("${tagPrefix}_$index").padding(horizontal = 4.dp, vertical = 10.dp),
+                .testTag("${tagPrefix}_$index").heightIn(min = 48.dp).padding(horizontal = 4.dp, vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Icon(icons[index], null, tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)) {
+                if (!compact) Icon(icons[index], null, tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp))
                 Text(label, style = MaterialTheme.typography.labelMedium,
                     color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
