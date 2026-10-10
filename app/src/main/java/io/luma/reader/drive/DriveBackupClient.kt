@@ -4,6 +4,7 @@ import io.luma.reader.data.BackupRepository
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -45,13 +46,13 @@ internal class DriveBackupClient(private val accessToken: String, private val co
         upload(file, latest?.id, onProgress)
         previous.drop(1).forEach { old ->
             currentCoroutineContext().ensureActive()
-            connection("$API/files/${encode(old.id)}", "DELETE").useConnection { request ->
-                if (request.responseCode != 404) {
-                    try { requireSuccess(request) }
-                    catch (error: Exception) {
-                        throw IllegalStateException("La copia nueva está guardada, pero no se pudieron borrar todas las copias antiguas. Vuelve a guardar para terminar la limpieza.", error)
-                    }
+            try {
+                connection("$API/files/${encode(old.id)}", "DELETE").useConnection { request ->
+                    if (request.responseCode != 404) requireSuccess(request)
                 }
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) {
+                throw IllegalStateException("La copia nueva está guardada, pero no se pudieron borrar todas las copias antiguas. Vuelve a guardar para terminar la limpieza.", error)
             }
         }
     }
@@ -139,7 +140,11 @@ internal class DriveBackupClient(private val accessToken: String, private val co
     }
 
     private fun connection(url: String, method: String = "GET") = connectionFactory(URL(url)).apply {
-        requestMethod = method; connectTimeout = 30_000; readTimeout = 120_000
+        // HttpURLConnection's base transport rejects PATCH. Google APIs support
+        // the same POST override used by google-api-java-client MethodOverride.
+        requestMethod = if (method == "PATCH") "POST" else method
+        if (method == "PATCH") setRequestProperty("X-HTTP-Method-Override", "PATCH")
+        connectTimeout = 30_000; readTimeout = 120_000
         instanceFollowRedirects = false
         setRequestProperty("Authorization", "Bearer $accessToken")
     }

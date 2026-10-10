@@ -111,7 +111,8 @@ class DriveBackupClientTest {
             }
             client.saveLatest(file) {}
             assertTrue(requests[1].url.query.contains("pageToken=more"))
-            assertEquals("PATCH", requests[2].requestMethod)
+            assertEquals("POST", requests[2].requestMethod)
+            assertEquals("PATCH", requests[2].getRequestProperty("X-HTTP-Method-Override"))
             assertTrue(requests[2].url.path.endsWith("/files/latest"))
             assertFalse(org.json.JSONObject(requests[2].written.toString("UTF-8")).has("parents"))
             assertEquals("PUT", requests[3].requestMethod)
@@ -136,7 +137,8 @@ class DriveBackupClientTest {
             }
             assertNotNull(runCatching { client.saveLatest(file) {} }.exceptionOrNull())
             assertTrue(requests.none { it.requestMethod == "DELETE" })
-            assertEquals("PATCH", requests[1].requestMethod)
+            assertEquals("POST", requests[1].requestMethod)
+            assertEquals("PATCH", requests[1].getRequestProperty("X-HTTP-Method-Override"))
             assertTrue(requests.all { it.disconnected })
         } finally { file.delete() }
     }
@@ -156,6 +158,7 @@ class DriveBackupClientTest {
             }
             client.saveLatest(file) {}
             assertEquals("POST", requests[1].requestMethod)
+            assertNull(requests[1].getRequestProperty("X-HTTP-Method-Override"))
             assertEquals("appDataFolder", org.json.JSONObject(requests[1].written.toString("UTF-8")).getJSONArray("parents").getString(0))
             assertEquals(3, requests.size)
         } finally { file.delete() }

@@ -38,7 +38,8 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
     val authorization = remember(activity) { Identity.getAuthorizationClient(activity) }
     val accountName = state.accountName
     var pendingAction by rememberSaveable { mutableStateOf<String?>(null) }
-    var authorizing by rememberSaveable { mutableStateOf(false) }
+    // A recreated sheet must not retain the busy flag of a disposed Google task.
+    var authorizing by remember { mutableStateOf(false) }
     var explanationAction by rememberSaveable { mutableStateOf<String?>(null) }
     val attached = remember { java.util.concurrent.atomic.AtomicBoolean(true) }
     DisposableEffect(Unit) { onDispose { attached.set(false) } }
