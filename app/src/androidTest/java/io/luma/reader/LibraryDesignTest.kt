@@ -66,6 +66,7 @@ class LibraryDesignTest {
         compose.onNodeWithContentDescription("Abrir ajustes generales").performClick()
         compose.onNodeWithText("Oscuro").performClick()
         screenshot("ajustes-oscuros")
+        compose.onNodeWithTag("settings_tab_1").performClick()
         compose.onNodeWithTag("general_settings_sheet").performScrollToNode(hasText("2 libros"))
         compose.onNodeWithText("2 libros").performClick()
         compose.onNodeWithTag("close_settings").performClick()
@@ -173,6 +174,7 @@ class LibraryDesignTest {
         compose.waitUntilAtLeastOneExists(hasTestTag("book_design-reading"), 30_000)
         compose.onNodeWithContentDescription("Abrir ajustes generales").performClick()
         screenshot("ajustes-renovados")
+        compose.onNodeWithTag("settings_tab_2").performClick()
         compose.onNodeWithTag("general_settings_sheet").performScrollToNode(hasText("Copias de seguridad y Google Drive"))
         compose.onNodeWithText("Copias de seguridad y Google Drive").performClick()
         compose.waitUntilAtLeastOneExists(hasTestTag("backup_sheet"), 10_000)
@@ -192,6 +194,7 @@ class LibraryDesignTest {
 
     private fun openBackup() {
         compose.onNodeWithContentDescription("Abrir ajustes generales").performClick()
+        compose.onNodeWithTag("settings_tab_2").performClick()
         compose.onNodeWithTag("general_settings_sheet").performScrollToNode(hasText("Copias de seguridad y Google Drive"))
         compose.onNodeWithText("Copias de seguridad y Google Drive").performClick()
         compose.waitUntilAtLeastOneExists(hasTestTag("backup_sheet"), 10_000)

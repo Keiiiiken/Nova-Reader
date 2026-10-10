@@ -136,34 +136,9 @@ internal fun ReaderSettingsSheet(
                 }
             }
 
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = RoundedCornerShape(22.dp),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 12.dp)
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(5.dp),
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    SettingsTab.entries.forEach { option ->
-                        Surface(
-                            onClick = { tab = option },
-                            shape = RoundedCornerShape(17.dp),
-                            color = if (tab == option) MaterialTheme.colorScheme.primary else Color.Transparent,
-                            contentColor = if (tab == option) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                option.label,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(vertical = 11.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                        }
-                    }
-                }
-            }
+            SettingsSectionTabs(SettingsTab.entries.map { it.label },
+                listOf(Icons.Default.FormatColorText, Icons.Default.AutoStories, Icons.Default.SettingsVoice),
+                tab.ordinal, { tab = SettingsTab.entries[it] }, "reader_settings_tab")
 
             when (tab) {
                 SettingsTab.APPEARANCE -> AppearanceSettings(settings, onSettingsChanged)

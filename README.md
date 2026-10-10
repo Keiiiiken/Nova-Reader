@@ -8,7 +8,7 @@ La versión 1.9.1 se instala en paralelo con `io.nova.reader` y usa una nueva fi
 
 - Importación múltiple mediante el selector seguro de Android.
 - Biblioteca offline con portadas, búsqueda, favoritos, orden y colecciones.
-- Biblioteca moderna con fondo limpio, acento azul, filtros subrayados y navegación fija: Biblioteca, Estantes y Notas.
+- Biblioteca con búsqueda fija arriba, filtros de selección, portadas con progreso y navegación fija: Biblioteca, Estantes y Notas.
 - Acceso compacto a la lectura actual, búsqueda por título o autor e importación visible.
 - Portadas tipográficas sobrias para libros sin imagen y sección local de subrayados y comentarios.
 - Detección automática de portada desde la primera imagen del libro cuando el EPUB no declara una.
@@ -111,3 +111,9 @@ La biblioteca migra de SharedPreferences a SQLite. Las escrituras se realizan or
 - [Compilación y firma](docs/COMPILACION-Y-FIRMA.md)
 
 Las copias de Drive son manuales y necesitan configurar un cliente OAuth Android para la firma instalada. El APK principal mantiene el paquete y el icono originales.
+
+## Versión 1.9.4
+
+Biblioteca con tarjeta destacada para continuar, portadas tipográficas con detalles geométricos, opciones sobre la portada y títulos con todo el ancho disponible. Estantes con su color elegido y notas en tarjetas de cita. Ajustes separados en Estilo, Biblioteca y Herramientas, con vistas previas de tema y densidad, los cuatro acentos visibles y superficies coherentes en claro y oscuro. Cabeceras con cierre en diccionario y herramientas del lector; las opciones de libro permiten desplazarse.
+
+Consulta [las prioridades pendientes](docs/PRIORIDADES-APP.md) para distinguir las mejoras propuestas de las funciones que ya existen.

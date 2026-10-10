@@ -1,5 +1,7 @@
 package io.luma.reader.ui
 
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -81,5 +83,32 @@ internal fun BackupProgress(state: BackupUiState, onOpen: (() -> Unit)? = null) 
         val progress = state.progress
         if (progress == null) LinearProgressIndicator(Modifier.fillMaxWidth())
         else LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+internal fun SettingsSectionTabs(
+    labels: List<String>, icons: List<ImageVector>, selected: Int, onSelected: (Int) -> Unit,
+    tagPrefix: String
+) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 10.dp)
+        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(20.dp)).padding(5.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        labels.forEachIndexed { index, label ->
+            val active = selected == index
+            Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
+                .background(if (active) MaterialTheme.colorScheme.surface else androidx.compose.ui.graphics.Color.Transparent)
+                .selectable(active, role = androidx.compose.ui.semantics.Role.Tab, onClick = { onSelected(index) })
+                .testTag("${tagPrefix}_$index").padding(horizontal = 4.dp, vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(icons[index], null, tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp))
+                Text(label, style = MaterialTheme.typography.labelMedium,
+                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    fontWeight = if (active) FontWeight.Bold else FontWeight.Normal)
+            }
+        }
     }
 }
