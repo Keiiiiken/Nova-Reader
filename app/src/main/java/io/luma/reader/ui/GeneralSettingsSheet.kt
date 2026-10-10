@@ -1,6 +1,10 @@
 package io.luma.reader.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.selected
@@ -43,7 +48,7 @@ internal fun GeneralSettingsSheet(
     ) {
         Column(Modifier.fillMaxWidth()) {
             Box(Modifier.padding(horizontal = 22.dp, vertical = 8.dp)) {
-                SettingsHeader("Ajustes", "Haz que Nova Reader se sienta a tu manera.", onDismiss, "close_settings")
+                SettingsHeader("Ajustes", "Tu biblioteca, a tu manera.", onDismiss, "close_settings")
             }
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().testTag("general_settings_sheet"),
@@ -60,25 +65,34 @@ internal fun GeneralSettingsSheet(
                                     modifier = Modifier.weight(1f).semantics { this.selected = selected }, shape = RoundedCornerShape(16.dp),
                                     color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface,
                                     border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null) {
-                                    Column(Modifier.padding(vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Icon(when (mode) {
-                                            AppThemeMode.SYSTEM -> Icons.Default.BrightnessAuto
-                                            AppThemeMode.LIGHT -> Icons.Default.LightMode
-                                            AppThemeMode.DARK -> Icons.Default.DarkMode
-                                        }, null, tint = MaterialTheme.colorScheme.primary)
-                                        Text(mode.label, style = MaterialTheme.typography.labelLarge)
+                                    Column(Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        ThemePreview(mode, Modifier.fillMaxWidth().height(62.dp))
+                                        Text(mode.label, style = MaterialTheme.typography.labelLarge,
+                                            modifier = Modifier.padding(bottom = 4.dp))
                                     }
                                 }
                             }
                         }
                         Text("Color de acento", style = MaterialTheme.typography.labelLarge)
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(AppAccent.entries) { accent ->
-                                FilterChip(selected = settings.accent == accent,
-                                    onClick = { onSettingsChanged(settings.copy(accent = accent)) },
-                                    leadingIcon = { Box(Modifier.size(14.dp).background(accent.previewColor(), CircleShape)) },
-                                    label = { Text(accent.label) })
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AppAccent.entries.chunked(2).forEach { row ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    row.forEach { accent ->
+                                        val selected = settings.accent == accent
+                                        Surface(onClick = { onSettingsChanged(settings.copy(accent = accent)) },
+                                            modifier = Modifier.weight(1f).semantics { this.selected = selected },
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant) {
+                                            Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                Box(Modifier.size(18.dp).background(accent.previewColor(), CircleShape))
+                                                Text(accent.label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                                                if (selected) Icon(Icons.Default.Check, null, Modifier.size(16.dp))
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -88,9 +102,21 @@ internal fun GeneralSettingsSheet(
                         Text("Portadas por fila", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             listOf(2 to "2 libros", 3 to "3 libros").forEach { (columns, label) ->
-                                FilterChip(selected = settings.libraryColumns == columns,
-                                    onClick = { onSettingsChanged(settings.copy(libraryColumns = columns)) },
-                                    label = { Text(label) })
+                                val selected = settings.libraryColumns == columns
+                                Surface(onClick = { onSettingsChanged(settings.copy(libraryColumns = columns)) },
+                                    modifier = Modifier.weight(1f).semantics { this.selected = selected },
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant) {
+                                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            repeat(columns) {
+                                                Box(Modifier.weight(1f).height(32.dp).background(
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = if (selected) .5f else .2f), RoundedCornerShape(4.dp)))
+                                            }
+                                        }
+                                        Text(label, style = MaterialTheme.typography.labelLarge)
+                                    }
+                                }
                             }
                         }
                     }
@@ -123,4 +149,25 @@ private fun AppAccent.previewColor() = when (this) {
     AppAccent.VIOLET -> Color(0xFF6558F5)
     AppAccent.OCEAN -> Color(0xFF087E8B)
     AppAccent.FOREST -> Color(0xFF247A55)
+}
+
+@Composable
+private fun ThemePreview(mode: AppThemeMode, modifier: Modifier) {
+    val accent = MaterialTheme.colorScheme.primary
+    Canvas(modifier.clip(RoundedCornerShape(9.dp))) {
+        val dark = Color(0xFF1A1F2B)
+        val light = Color(0xFFF4F6FA)
+        drawRect(if (mode == AppThemeMode.DARK) dark else light)
+        if (mode == AppThemeMode.SYSTEM) drawRect(dark, topLeft = Offset(size.width / 2f, 0f))
+        val inset = 7.dp.toPx()
+        drawRoundRect(accent.copy(alpha = .55f), Offset(inset, inset),
+            Size(size.width - inset * 2, 5.dp.toPx()), CornerRadius(2.dp.toPx()))
+        val gap = 4.dp.toPx()
+        val width = (size.width - inset * 2 - gap * 2) / 3f
+        repeat(3) { index ->
+            drawRoundRect(accent.copy(alpha = .3f + index * .15f),
+                Offset(inset + index * (width + gap), inset + 12.dp.toPx()),
+                Size(width, size.height - inset * 2 - 12.dp.toPx()), CornerRadius(3.dp.toPx()))
+        }
+    }
 }

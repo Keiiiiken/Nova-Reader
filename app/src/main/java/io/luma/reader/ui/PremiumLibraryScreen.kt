@@ -13,12 +13,15 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Arrangement
@@ -62,6 +65,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Notes
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -94,7 +98,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -313,7 +320,7 @@ private fun LumaDock(selected: HomeSection, onSelected: (HomeSection) -> Unit) {
     Surface(color = MaterialTheme.colorScheme.background) {
         Column(Modifier.navigationBarsPadding()) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Row(Modifier.fillMaxWidth().height(68.dp)) {
+            Row(Modifier.fillMaxWidth().height(76.dp).padding(horizontal = 12.dp)) {
                 HomeSection.entries.forEach { destination ->
                     val active = destination == selected
                     val color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
@@ -328,7 +335,8 @@ private fun LumaDock(selected: HomeSection, onSelected: (HomeSection) -> Unit) {
                             HomeSection.LIBRARY -> Icons.Default.AutoStories
                             HomeSection.COLLECTIONS -> Icons.Default.CollectionsBookmark
                             HomeSection.NOTES -> Icons.Default.Notes
-                        }, null, tint = color, modifier = Modifier.size(23.dp))
+                        }, null, tint = color, modifier = Modifier.background(if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent, CircleShape)
+                            .padding(horizontal = 20.dp, vertical = 5.dp).size(23.dp))
                         Text(destination.label, color = color, fontSize = 12.sp,
                             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal)
                     }
@@ -373,13 +381,12 @@ private fun LibraryDashboard(
         ) {
             LibraryHeader(query, onQuery, onSettings, onImport)
             Column {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item { FilterPill("Todos", filter == FILTER_ALL) { onFilter(FILTER_ALL) } }
                     item { FilterPill("Lectura", filter == FILTER_READING) { onFilter(FILTER_READING) } }
                     item { FilterPill("Pendientes", filter == FILTER_PENDING) { onFilter(FILTER_PENDING) } }
                     item { FilterPill("Favoritos", filter == FILTER_FAVORITES) { onFilter(FILTER_FAVORITES) } }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             }
         }
         LazyVerticalGrid(
@@ -395,8 +402,6 @@ private fun LibraryDashboard(
                 if (continueBook != null && filter == FILTER_ALL && query.isBlank()) {
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Column {
-                            Text("Seguir leyendo", style = MaterialTheme.typography.titleMedium)
-                            Spacer(Modifier.height(12.dp))
                             ContinueReadingCard(continueBook, { onOpenBook(continueBook.id) }, { onBookOptions(continueBook) })
                         }
                     }
@@ -449,16 +454,16 @@ private fun LibraryHeader(
     ) {
         Box(Modifier.weight(1f)) { SearchBar(query, onQuery) }
         IconButton(onClick = onSettings) {
-            Icon(Icons.Default.MoreHoriz, "Abrir ajustes generales", tint = MaterialTheme.colorScheme.onSurface)
+            Icon(Icons.Default.Settings, "Abrir ajustes generales", tint = MaterialTheme.colorScheme.onSurface)
         }
     }
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text("NOVA READER", fontSize = 11.sp, letterSpacing = 2.sp,
+            Text("TU ESPACIO DE LECTURA", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp, letterSpacing = 1.5.sp,
                 fontWeight = FontWeight.SemiBold)
             Text("Biblioteca", style = MaterialTheme.typography.headlineMedium)
         }
-        TextButton(onClick = onImport) {
+        Button(onClick = onImport, shape = RoundedCornerShape(16.dp), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)) {
             Icon(Icons.Default.Add, null, Modifier.size(20.dp))
             Spacer(Modifier.width(4.dp))
             Text("Importar")
@@ -474,7 +479,7 @@ private fun SearchBar(value: String, onValueChanged: (String) -> Unit) {
         trailingIcon = { if (value.isNotBlank()) IconButton(onClick = { onValueChanged("") }) { Icon(Icons.Default.Close, "Limpiar búsqueda") } },
         placeholder = { Text("Buscar libros", style = MaterialTheme.typography.bodySmall, maxLines = 1) },
         textStyle = MaterialTheme.typography.bodyMedium,
-        singleLine = true, shape = RoundedCornerShape(8.dp),
+        singleLine = true, shape = RoundedCornerShape(18.dp),
         colors = androidx.compose.material3.TextFieldDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
@@ -507,27 +512,31 @@ private fun EditorialEmptyState(onImport: () -> Unit) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ContinueReadingCard(book: Book, onClick: () -> Unit, onOptions: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).testTag("continue_reading").combinedClickable(
-        onClick = onClick, onLongClick = onOptions, onLongClickLabel = "Opciones de ${book.title}"
-    ).padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        BookCover(book, Modifier.width(52.dp).height(78.dp), compact = true, thumbnail = true)
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(book.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(book.author, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    val colors = MaterialTheme.colorScheme
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+        .background(Brush.linearGradient(listOf(colors.primaryContainer, colors.primaryContainer.copy(alpha = .45f))))
+        .testTag("continue_reading").combinedClickable(
+            onClick = onClick, onLongClick = onOptions, onLongClickLabel = "Opciones de ${book.title}"
+        ).padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+        BookCover(book, Modifier.width(64.dp).height(96.dp), compact = true, thumbnail = true)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("SEGUIR LEYENDO", style = MaterialTheme.typography.labelSmall,
+                letterSpacing = 1.sp, color = colors.onPrimaryContainer)
+            Text(book.title, style = MaterialTheme.typography.titleMedium, color = colors.onPrimaryContainer,
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(book.author, style = MaterialTheme.typography.bodySmall, color = colors.onPrimaryContainer,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 LinearProgressIndicator(progress = { book.progress.coerceIn(0f, 1f) },
-                    color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.weight(1f).height(3.dp).clip(CircleShape))
+                    color = colors.primary, trackColor = colors.onPrimaryContainer.copy(alpha = .12f),
+                    modifier = Modifier.weight(1f).height(4.dp).clip(CircleShape))
                 Text("${(book.progress * 100).roundToInt()}%", style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    color = colors.onPrimaryContainer)
             }
         }
-        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 16.dp).size(18.dp))
+        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, tint = colors.onPrimaryContainer,
+            modifier = Modifier.padding(start = 12.dp).size(20.dp))
     }
 }
 
@@ -543,12 +552,12 @@ private fun SectionTitle(title: String, subtitle: String, trailing: @Composable 
 
 @Composable
 private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
-    val color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.width(IntrinsicSize.Max).selectable(selected, role = Role.Tab, onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, color = color, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            fontSize = 14.sp, modifier = Modifier.padding(vertical = 14.dp))
-        Box(Modifier.fillMaxWidth().height(2.dp).background(if (selected) color else Color.Transparent))
+    val colors = MaterialTheme.colorScheme
+    Box(Modifier.clip(CircleShape).background(if (selected) colors.primaryContainer else colors.surface)
+        .selectable(selected, role = Role.Tab, onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        contentAlignment = Alignment.Center) {
+        Text(label, color = if (selected) colors.onPrimaryContainer else colors.onSurfaceVariant,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, fontSize = 13.sp)
     }
 }
 
@@ -561,18 +570,26 @@ private fun ModernBookCard(book: Book, dense: Boolean, onClick: () -> Unit, onOp
         Box(Modifier.fillMaxWidth().aspectRatio(.67f)) {
             BookCover(book, Modifier.fillMaxSize(), compact = dense)
             if (book.favorite) Icon(Icons.Default.Favorite, "Favorito", tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.align(Alignment.TopStart).background(MaterialTheme.colorScheme.surface, RoundedCornerShape(bottomEnd = 4.dp))
-                    .padding(4.dp).size(14.dp))
-        }
-        Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(top = 6.dp)) {
-            Column(Modifier.weight(1f)) {
-                Text(book.title, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(book.author, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                modifier = Modifier.align(Alignment.TopStart).padding(6.dp)
+                    .background(MaterialTheme.colorScheme.surface, CircleShape).padding(5.dp).size(14.dp))
+            IconButton(onClick = onOptions, modifier = Modifier.align(Alignment.BottomEnd).size(48.dp)) {
+                Icon(Icons.Default.MoreHoriz, "Opciones de ${book.title}", tint = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.background(MaterialTheme.colorScheme.surface, CircleShape).padding(6.dp).size(20.dp))
             }
-            IconButton(onClick = onOptions, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Default.MoreHoriz, "Opciones de ${book.title}", Modifier.size(20.dp))
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(book.title, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold,
+            maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(book.author, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (book.progress > 0f) {
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                LinearProgressIndicator(progress = { book.progress.coerceIn(0f, 1f) },
+                    modifier = Modifier.weight(1f).height(3.dp).clip(CircleShape),
+                    trackColor = MaterialTheme.colorScheme.outlineVariant)
+                Text("${(book.progress * 100).roundToInt()}%", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall)
             }
         }
     }
@@ -589,23 +606,31 @@ private fun BookCover(book: Book, modifier: Modifier = Modifier, compact: Boolea
     if (loadedBitmap != null) {
         Image(
             bitmap = loadedBitmap, contentDescription = "Portada de ${book.title}", contentScale = ContentScale.Crop,
-            modifier = modifier.clip(RoundedCornerShape(4.dp))
+            modifier = modifier.shadow(3.dp, RoundedCornerShape(10.dp)).clip(RoundedCornerShape(10.dp))
         )
     } else {
         val palette = listOf(Color(0xFFDFE7EE), Color(0xFFEAE3D8), Color(0xFFDEE7DC), Color(0xFFE8DFE4))
         val background = palette[(book.title.hashCode() and Int.MAX_VALUE) % palette.size]
-        Column(modifier.clip(RoundedCornerShape(4.dp)).background(background)
-            .padding(if (compact) 8.dp else 14.dp),
-            verticalArrangement = if (thumbnail) Arrangement.Center else Arrangement.SpaceBetween,
-            horizontalAlignment = if (thumbnail) Alignment.CenterHorizontally else Alignment.Start) {
-            if (!thumbnail) Box(Modifier.width(20.dp).height(2.dp).background(Color(0xFF344054)))
-            Text(if (thumbnail) book.title.trim().take(1).uppercase() else book.title, color = Color(0xFF243042), fontWeight = FontWeight.SemiBold,
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
-                fontSize = if (thumbnail) 26.sp else if (compact) 12.sp else 18.sp,
-                lineHeight = if (thumbnail) 30.sp else if (compact) 15.sp else 22.sp,
-                maxLines = 4, overflow = TextOverflow.Ellipsis)
-            if (!thumbnail) Text(book.author, color = Color(0xFF475467), fontSize = if (compact) 8.sp else 10.sp,
-                maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Box(modifier.shadow(3.dp, RoundedCornerShape(10.dp)).clip(RoundedCornerShape(10.dp)).background(background)) {
+            Canvas(Modifier.matchParentSize()) {
+                drawCircle(Color.White.copy(alpha = .3f), radius = size.width * .75f,
+                    center = Offset(size.width, size.height * .25f))
+                drawCircle(Color(0xFF344054).copy(alpha = .045f), radius = size.width * .7f,
+                    center = Offset(size.width * .1f, size.height))
+                drawLine(Color(0xFF344054).copy(alpha = .12f), Offset(5.dp.toPx(), 0f),
+                    Offset(5.dp.toPx(), size.height), strokeWidth = 1.dp.toPx())
+            }
+            Column(Modifier.fillMaxSize().padding(if (compact) 12.dp else 18.dp),
+                verticalArrangement = if (thumbnail) Arrangement.Center else Arrangement.SpaceBetween,
+                horizontalAlignment = if (thumbnail) Alignment.CenterHorizontally else Alignment.Start) {
+                if (!thumbnail) Icon(Icons.Default.AutoStories, null, tint = Color(0xFF475467), modifier = Modifier.size(16.dp))
+                Text(if (thumbnail) book.title.trim().take(1).uppercase() else book.title, color = Color(0xFF243042), fontWeight = FontWeight.SemiBold,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Serif,
+                    fontSize = if (thumbnail) 26.sp else if (compact) 13.sp else 19.sp,
+                    lineHeight = if (thumbnail) 30.sp else if (compact) 17.sp else 24.sp,
+                    maxLines = 4, overflow = TextOverflow.Ellipsis)
+                if (!thumbnail) Box(Modifier.width(24.dp).height(2.dp).background(Color(0xFF475467)))
+            }
         }
     }
 }
@@ -698,8 +723,8 @@ private fun ShelfDetail(
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 10.dp)) {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver a estantes") }
                 Column(Modifier.weight(1f)) {
-                    Text("ESTANTE", color = LumaCoral, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, letterSpacing = 1.8.sp)
-                    Text(collection?.name ?: "Sin estante", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
+                    Text("ESTANTE", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, letterSpacing = 1.8.sp)
+                    Text(collection?.name ?: "Sin estante", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Text("${books.size} ${if (books.size == 1) "libro" else "libros"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -746,7 +771,7 @@ private fun ShelfEmptyState(shelfName: String) {
 private fun PageHeader(kicker: String, title: String, description: String) {
     Column(Modifier.padding(top = 10.dp, bottom = 12.dp)) {
         Text(kicker, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold, fontSize = 11.sp, letterSpacing = 1.8.sp)
-        Text(title, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
+        Text(title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
     }
 }
@@ -765,20 +790,26 @@ private fun EmptyCollections(onAdd: () -> Unit) {
 
 @Composable
 private fun CollectionCard(collection: BookCollection, books: List<Book>, onOpen: () -> Unit, onDelete: () -> Unit) {
-    Column {
-        Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (books.isNotEmpty()) BookCover(books.first(), Modifier.width(46.dp).height(68.dp), compact = true, thumbnail = true)
-            else Box(Modifier.width(46.dp).height(68.dp).background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp)),
-                contentAlignment = Alignment.Center) { Icon(Icons.Default.CollectionsBookmark, null, tint = MaterialTheme.colorScheme.primary) }
+    val tint = listOf(Color(0xFF155EEF), Color(0xFF9A6B31), Color(0xFF168C80), Color(0xFFCE7D21))
+        .getOrElse(collection.colorIndex) { MaterialTheme.colorScheme.primary }
+    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+        Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.width(56.dp).height(76.dp).background(tint.copy(alpha = .1f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center) {
+                if (books.isNotEmpty()) BookCover(books.first(), Modifier.width(40.dp).height(58.dp), compact = true, thumbnail = true)
+                else Icon(Icons.Default.CollectionsBookmark, null, tint = tint)
+            }
             Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.width(24.dp).height(3.dp).background(tint, CircleShape))
                 Text(collection.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text("${books.size} ${if (books.size == 1) "libro" else "libros"}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${books.size} ${if (books.size == 1) "libro" else "libros"}",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             IconButton(onClick = onDelete) { Icon(Icons.Default.DeleteOutline, "Eliminar estante ${collection.name}", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-            Icon(Icons.AutoMirrored.Filled.ArrowForward, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 
@@ -800,16 +831,20 @@ private fun NotesDashboard(state: AppUiState, onOpenAnnotation: (String, io.luma
             }
         }
         items(entries, key = { "${it.first.id}:${it.second.id}" }) { (book, annotation) ->
-            Column(Modifier.fillMaxWidth().clickable { onOpenAnnotation(book.id, annotation) }.padding(vertical = 8.dp)) {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface)
+                .clickable { onOpenAnnotation(book.id, annotation) }.padding(20.dp)) {
                 Text(book.title, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
                 Spacer(Modifier.height(8.dp))
-                if (annotation.selectedText.isNotBlank()) Text(annotation.selectedText, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                if (annotation.selectedText.isNotBlank()) Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.height(IntrinsicSize.Min)) {
+                    Box(Modifier.width(3.dp).fillMaxSize().background(MaterialTheme.colorScheme.primary.copy(alpha = .5f), CircleShape))
+                    Text(annotation.selectedText, maxLines = 6, overflow = TextOverflow.Ellipsis,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Serif, style = MaterialTheme.typography.bodyLarge)
+                }
                 if (annotation.note.isNotBlank()) Text(annotation.note, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp))
                 Text("Capítulo ${annotation.chapterIndex + 1} · Ir al fragmento", style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 10.dp))
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
         item {
             Text("Tiempo de lectura · ${formatReadingTime(state.library.books.sumOf { it.readingTimeMillis })}",
@@ -869,7 +904,7 @@ private fun BookActionSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = MaterialTheme.colorScheme.background
     ) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 8.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 BookCover(book, Modifier.width(74.dp).height(108.dp), compact = true)
                 Spacer(Modifier.width(16.dp))

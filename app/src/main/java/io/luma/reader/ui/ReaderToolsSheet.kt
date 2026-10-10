@@ -38,50 +38,55 @@ internal fun ReaderToolsSheet(book: Book, onDismiss: () -> Unit, onNavigate: (Re
         catch (e: Exception) { error = "No se pudo buscar en el libro: ${e.message}" }
         finally { searching = false }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        LazyColumn(Modifier.fillMaxWidth().testTag("reader_tools"), contentPadding = PaddingValues(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            item {
-                Text("Explorar el libro", style = MaterialTheme.typography.headlineMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(tab == 0, { tab = 0 }, label = { Text("Buscar") })
-                    FilterChip(tab == 1, { tab = 1 }, label = { Text("Marcadores") })
-                }
-                TextButton(onClick = onDictionary) { Text("Abrir diccionario") }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.background) {
+        Column {
+            Box(Modifier.padding(horizontal = 22.dp, vertical = 8.dp)) {
+                SettingsHeader("Explorar el libro", book.title, onDismiss, "close_reader_tools")
             }
-            if (tab == 0) {
-                item { OutlinedTextField(query, { query = it.take(120) }, label = { Text("Buscar en todo el libro") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth().testTag("book_search")) }
-                if (searching) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-                error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
-                if (!searching && query.trim().length >= 2 && results.isEmpty() && error == null) item { Text("Sin coincidencias") }
-                items(results, key = { it.chapterIndex }) { result ->
-                    Column(Modifier.fillMaxWidth().clickable { onNavigate(ReaderTarget(result.chapterIndex, searchQuery = query.trim())) }.padding(vertical = 8.dp)) {
-                        Text(result.title, style = MaterialTheme.typography.titleMedium)
-                        Text("${result.matches} ${if (result.matches == 1) "coincidencia" else "coincidencias"}", color = MaterialTheme.colorScheme.primary)
-                        Text(result.excerpt, maxLines = 4)
+            LazyColumn(Modifier.fillMaxWidth().testTag("reader_tools"), contentPadding = PaddingValues(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(tab == 0, { tab = 0 }, label = { Text("Buscar") })
+                        FilterChip(tab == 1, { tab = 1 }, label = { Text("Marcadores") })
                     }
-                    HorizontalDivider()
+                    TextButton(onClick = onDictionary) { Text("Abrir diccionario") }
                 }
-            } else {
-                item { Button(onClick = onBookmarkCurrent, modifier = Modifier.fillMaxWidth()) { Text("Guardar posición actual") } }
-                if (book.bookmarks.isEmpty()) item { Text("Todavía no hay marcadores. Guarda una posición para volver después.") }
-                items(book.bookmarks.sortedByDescending { it.createdAt }, key = ReaderBookmark::id) { bookmark ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f).clickable { onNavigate(ReaderTarget(bookmark.chapterIndex, bookmark.anchor, bookmark.progress)) }.padding(vertical = 8.dp)) {
-                            Text(book.chapters.getOrNull(bookmark.chapterIndex)?.title
-                                ?: bookmark.label.ifBlank { "Capítulo ${bookmark.chapterIndex + 1}" }, maxLines = 2)
-                            bookmark.anchor?.text?.takeIf { it.isNotBlank() }?.let { fragment ->
-                                Text("… $fragment", maxLines = 2, style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Text("${((bookmark.chapterIndex + bookmark.progress) / book.chapters.size.coerceAtLeast(1) * 100).toInt()}% del libro", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (tab == 0) {
+                    item { OutlinedTextField(query, { query = it.take(120) }, label = { Text("Buscar en todo el libro") }, singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("book_search")) }
+                    if (searching) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                    error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+                    if (!searching && query.trim().length >= 2 && results.isEmpty() && error == null) item { Text("Sin coincidencias") }
+                    items(results, key = { it.chapterIndex }) { result ->
+                        Column(Modifier.fillMaxWidth().clickable { onNavigate(ReaderTarget(result.chapterIndex, searchQuery = query.trim())) }.padding(vertical = 8.dp)) {
+                            Text(result.title, style = MaterialTheme.typography.titleMedium)
+                            Text("${result.matches} ${if (result.matches == 1) "coincidencia" else "coincidencias"}", color = MaterialTheme.colorScheme.primary)
+                            Text(result.excerpt, maxLines = 4)
                         }
-                        IconButton(onClick = { onDeleteBookmark(bookmark.id) }) { Icon(Icons.Default.DeleteOutline, "Eliminar marcador") }
+                        HorizontalDivider()
                     }
-                    HorizontalDivider()
+                } else {
+                    item { Button(onClick = onBookmarkCurrent, modifier = Modifier.fillMaxWidth()) { Text("Guardar posición actual") } }
+                    if (book.bookmarks.isEmpty()) item { Text("Todavía no hay marcadores. Guarda una posición para volver después.") }
+                    items(book.bookmarks.sortedByDescending { it.createdAt }, key = ReaderBookmark::id) { bookmark ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f).clickable { onNavigate(ReaderTarget(bookmark.chapterIndex, bookmark.anchor, bookmark.progress)) }.padding(vertical = 8.dp)) {
+                                Text(book.chapters.getOrNull(bookmark.chapterIndex)?.title
+                                    ?: bookmark.label.ifBlank { "Capítulo ${bookmark.chapterIndex + 1}" }, maxLines = 2)
+                                bookmark.anchor?.text?.takeIf { it.isNotBlank() }?.let { fragment ->
+                                    Text("… $fragment", maxLines = 2, style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                Text("${((bookmark.chapterIndex + bookmark.progress) / book.chapters.size.coerceAtLeast(1) * 100).toInt()}% del libro", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = { onDeleteBookmark(bookmark.id) }) { Icon(Icons.Default.DeleteOutline, "Eliminar marcador") }
+                        }
+                        HorizontalDivider()
+                    }
                 }
+                item { Spacer(Modifier.navigationBarsPadding()) }
             }
-            item { Spacer(Modifier.navigationBarsPadding()) }
         }
     }
 }

@@ -47,11 +47,11 @@ private fun lightColors(accent: AppAccent) = accentPalette(accent).let { palette
     secondary = palette.primary,
     onSecondary = Color.White,
     secondaryContainer = palette.container,
-    background = Cream,
+    background = Color(0xFFF7F8FC),
     onBackground = Ink,
     surface = Color.White,
     onSurface = Ink,
-    surfaceVariant = Color(0xFFF2F4F7),
+    surfaceVariant = Color(0xFFEDF0F7),
     onSurfaceVariant = MutedInk,
     outline = Color(0xFFD0D5DD),
     outlineVariant = Color(0xFFEAECF0),
@@ -64,12 +64,14 @@ private fun darkColors(accent: AppAccent) = accentPalette(accent).let { palette 
     primaryContainer = palette.darkContainer,
     onPrimaryContainer = Color(0xFFE5E0FF),
     secondary = palette.darkPrimary,
-    background = Color(0xFF121116),
+    background = Color(0xFF10131B),
     onBackground = Color(0xFFE8E3EC),
-    surface = Color(0xFF1A191F),
+    surface = Color(0xFF1A1F2B),
     onSurface = Color(0xFFE8E3EC),
-    surfaceVariant = Color(0xFF2A282F),
-    onSurfaceVariant = Color(0xFFCAC4CF)
+    surfaceVariant = Color(0xFF252D3C),
+    onSurfaceVariant = Color(0xFFBAC3D4),
+    outline = Color(0xFF7D879B),
+    outlineVariant = Color(0xFF333D50)
 )}
 
 @Composable

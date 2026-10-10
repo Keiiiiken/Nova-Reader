@@ -552,7 +552,7 @@ private fun VoiceSettings(
                             putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, settings.ttsVolume)
                         }
                         speak(
-                            "Así sonará la narración en Luma Reader.",
+                            "Así sonará la narración en Nova Reader.",
                             TextToSpeech.QUEUE_FLUSH,
                             parameters,
                             "luma_voice_preview"
@@ -673,7 +673,8 @@ private fun DropdownSetting(
     onSelected: (Choice) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceVariant,
+    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         contentColor = MaterialTheme.colorScheme.onSurface) {
         Column(Modifier.padding(16.dp)) {
             SettingLabel(label)
@@ -728,7 +729,8 @@ private fun SettingSlider(
     steps: Int,
     onChange: (Float) -> Unit
 ) {
-    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceVariant,
+    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         contentColor = MaterialTheme.colorScheme.onSurface) {
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

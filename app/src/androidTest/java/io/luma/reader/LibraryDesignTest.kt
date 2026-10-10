@@ -61,6 +61,20 @@ class LibraryDesignTest {
         compose.onNodeWithTag("book_${books[0].id}").assertExists()
         compose.onNodeWithContentDescription("Volver a estantes").performClick()
         compose.onNodeWithContentDescription("Nuevo estante").assertExists()
+        // Capture the same destinations with the user-selected dark palette.
+        compose.onNodeWithText("Biblioteca").performClick()
+        compose.onNodeWithContentDescription("Abrir ajustes generales").performClick()
+        compose.onNodeWithText("Oscuro").performClick()
+        screenshot("ajustes-oscuros")
+        compose.onNodeWithTag("general_settings_sheet").performScrollToNode(hasText("2 libros"))
+        compose.onNodeWithText("2 libros").performClick()
+        compose.onNodeWithTag("close_settings").performClick()
+        compose.onNodeWithContentDescription("Limpiar búsqueda").performClick()
+        screenshot("biblioteca-oscura-dos-columnas")
+        compose.onNodeWithText("Notas").performClick()
+        screenshot("notas-oscuras")
+        compose.onNodeWithText("Estantes").performClick()
+        screenshot("estantes-oscuros")
     }
 
     @Test fun longPressOpensTheSameOptionsAsTheMenuButton() {

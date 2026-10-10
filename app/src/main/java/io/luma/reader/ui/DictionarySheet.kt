@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -34,34 +37,43 @@ internal fun DictionarySheet(initialWord: String, onDismiss: () -> Unit) {
         catch (e: Exception) { error = e.message ?: "No se pudo abrir el diccionario" }
         finally { loading = false }
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        LazyColumn(Modifier.fillMaxWidth().testTag("dictionary_sheet"), contentPadding = PaddingValues(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            item {
-                Text("Diccionario", style = MaterialTheme.typography.headlineMedium)
-                Text("Español · disponible sin conexión", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(query, { query = it.take(80) }, label = { Text("Palabra") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth().testTag("dictionary_query"))
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.background) {
+        Column {
+            Box(Modifier.padding(horizontal = 22.dp, vertical = 8.dp)) {
+                SettingsHeader("Diccionario", "Español · disponible sin conexión", onDismiss, "close_dictionary")
             }
-            if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
-            error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
-            if (!loading && query.isNotBlank() && entries.isEmpty() && error == null) item {
-                Text("No encontramos esa palabra. Puedes buscar otra o probar una sugerencia.")
-            }
-            items(suggestions) { word -> Text(word, Modifier.fillMaxWidth().clickable { query = word }.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.primary) }
-            items(entries) { entry ->
-                Column(modifier = Modifier.testTag("dictionary_entry_${entry.word}"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(entry.word, style = MaterialTheme.typography.titleLarge)
-                    entry.definitions.forEachIndexed { index, sense ->
-                        Text("${index + 1}. ${sense.definition}")
-                    }
-                    HorizontalDivider()
+            LazyColumn(Modifier.fillMaxWidth().testTag("dictionary_sheet"), contentPadding = PaddingValues(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                item {
+                    OutlinedTextField(query, { query = it.take(80) }, label = { Text("Palabra") }, singleLine = true,
+                        leadingIcon = { Icon(Icons.Default.Search, null) }, shape = RoundedCornerShape(18.dp),
+                        modifier = Modifier.fillMaxWidth().testTag("dictionary_query"))
                 }
-            }
-            item {
-                Text("Fuente: Wikcionario en español, extraído por Kaikki/Wiktextract. Definiciones adaptadas a un índice local bajo CC BY-SA 4.0. Consulta la licencia y los créditos en Ajustes.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.navigationBarsPadding())
+                if (query.isBlank()) item {
+                    Text("¿Qué palabra descubriste hoy?", style = MaterialTheme.typography.titleLarge)
+                    Text("Escríbela arriba para consultar su significado.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+                error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+                if (!loading && query.isNotBlank() && entries.isEmpty() && error == null) item {
+                    Text("No encontramos esa palabra. Puedes buscar otra o probar una sugerencia.")
+                }
+                items(suggestions) { word -> Text(word, Modifier.fillMaxWidth().clickable { query = word }.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.primary) }
+                items(entries) { entry ->
+                    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
+                    Column(modifier = Modifier.fillMaxWidth().padding(18.dp).testTag("dictionary_entry_${entry.word}"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(entry.word, style = MaterialTheme.typography.titleLarge)
+                        entry.definitions.forEachIndexed { index, sense ->
+                            Text("${index + 1}. ${sense.definition}")
+                        }
+                    }
+                    }
+                }
+                item {
+                    Text("Fuente: Wikcionario en español, extraído por Kaikki/Wiktextract. Definiciones adaptadas a un índice local bajo CC BY-SA 4.0. Consulta la licencia y los créditos en Ajustes.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.navigationBarsPadding())
+                }
             }
         }
     }
