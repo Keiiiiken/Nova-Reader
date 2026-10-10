@@ -15,24 +15,54 @@ data class DriveBackup(val id: String, val name: String, val modifiedTime: Strin
 
 /** Uses only drive.appdata. Access tokens remain in memory for one user-initiated operation. */
 internal class DriveBackupClient(private val accessToken: String, private val connectionFactory: (URL) -> HttpsURLConnection = { it.openConnection() as HttpsURLConnection }) {
-    suspend fun list(): List<DriveBackup> {
+    suspend fun list(): List<DriveBackup> = listPage(null).first
+
+    private suspend fun listPage(pageToken: String?): Pair<List<DriveBackup>, String?> {
         val q = "trashed = false and appProperties has { key='novaBackup' and value='1' }"
-        val url = "$API/files?spaces=appDataFolder&pageSize=100&orderBy=modifiedTime%20desc&fields=files(id,name,modifiedTime,size)&q=${encode(q)}"
+        val url = "$API/files?spaces=appDataFolder&pageSize=100&orderBy=modifiedTime%20desc&fields=nextPageToken,files(id,name,modifiedTime,size)&q=${encode(q)}" +
+            (pageToken?.let { "&pageToken=${encode(it)}" } ?: "")
         return connection(url).useConnection { request ->
             requireSuccess(request)
-            val files = JSONObject(request.inputStream.bufferedReader().use { it.readText() }).getJSONArray("files")
+            val response = JSONObject(request.inputStream.bufferedReader().use { it.readText() })
+            val files = response.getJSONArray("files")
             (0 until files.length()).map { index -> files.getJSONObject(index).let {
                 DriveBackup(it.getString("id"), it.getString("name"), it.getString("modifiedTime"), it.optLong("size"))
-            } }
+            } } to response.optString("nextPageToken").takeIf { it.isNotBlank() }
         }
     }
 
-    suspend fun upload(file: File, onProgress: (Float) -> Unit) {
+    /** Update the latest file; remove legacy duplicates only after the upload completes. */
+    suspend fun saveLatest(file: File, onProgress: (Float) -> Unit) {
+        val previous = mutableListOf<DriveBackup>()
+        var pageToken: String? = null
+        do {
+            currentCoroutineContext().ensureActive()
+            val (files, next) = listPage(pageToken)
+            previous += files
+            pageToken = next
+        } while (pageToken != null)
+        val latest = previous.firstOrNull()
+        upload(file, latest?.id, onProgress)
+        previous.drop(1).forEach { old ->
+            currentCoroutineContext().ensureActive()
+            connection("$API/files/${encode(old.id)}", "DELETE").useConnection { request ->
+                if (request.responseCode != 404) {
+                    try { requireSuccess(request) }
+                    catch (error: Exception) {
+                        throw IllegalStateException("La copia nueva está guardada, pero no se pudieron borrar todas las copias antiguas. Vuelve a guardar para terminar la limpieza.", error)
+                    }
+                }
+            }
+        }
+    }
+
+    suspend fun upload(file: File, replaceId: String? = null, onProgress: (Float) -> Unit) {
         require(file.length() <= BackupRepository.MAX_BACKUP) { "La copia supera 2 GiB" }
         val metadata = JSONObject().put("name", "NovaReader-${java.text.SimpleDateFormat("yyyy-MM-dd-HHmmss", java.util.Locale.US).format(java.util.Date())}.zip")
-            .put("parents", JSONArray().put("appDataFolder"))
             .put("appProperties", JSONObject().put("novaBackup", "1").put("formatVersion", "1"))
-        val session = connection("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name", "POST").useConnection { request ->
+        if (replaceId == null) metadata.put("parents", JSONArray().put("appDataFolder"))
+        val target = "https://www.googleapis.com/upload/drive/v3/files" + (replaceId?.let { "/${encode(it)}" } ?: "")
+        val session = connection("$target?uploadType=resumable&fields=id,name", if (replaceId == null) "POST" else "PATCH").useConnection { request ->
             request.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
             request.setRequestProperty("X-Upload-Content-Type", "application/zip")
             request.setRequestProperty("X-Upload-Content-Length", file.length().toString())

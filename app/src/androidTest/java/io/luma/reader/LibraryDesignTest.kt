@@ -2,6 +2,8 @@ package io.luma.reader
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.net.Uri
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -15,6 +17,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import org.junit.Assert.*
 
 @RunWith(AndroidJUnit4::class)
 @OptIn(ExperimentalTestApi::class)
@@ -98,6 +103,84 @@ class LibraryDesignTest {
         compose.onNodeWithText("Biblioteca").performClick()
         compose.onNodeWithContentDescription("Abrir ajustes generales").performClick()
         compose.onNodeWithTag("general_settings_sheet").assertExists()
+    }
+
+    @Test fun closingAndReopeningAnActiveBackupKeepsNavigationAndSettingsUsable() {
+        seed()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntilAtLeastOneExists(hasTestTag("book_design-reading"), 30_000)
+        openBackup()
+        val release = CountDownLatch(1)
+        val waiting = CountDownLatch(1)
+        val output = File(context.cacheDir, "design-backup.zip")
+        lateinit var viewModel: MainViewModel
+        try {
+            // Hold the real writer queue so the copy remains active during navigation.
+            io.luma.reader.data.LibraryWrites.enqueue { waiting.countDown(); release.await(30, TimeUnit.SECONDS) }
+            assertTrue(waiting.await(5, TimeUnit.SECONDS))
+            scenario!!.onActivity {
+                viewModel = ViewModelProvider(it)[MainViewModel::class.java]
+                viewModel.exportBackup(Uri.fromFile(output))
+            }
+            compose.waitUntil(10_000) { viewModel.state.value.backup.busy }
+            compose.onNodeWithTag("backup_sheet").performTouchInput { swipeDown(durationMillis = 400) }
+            compose.waitUntilDoesNotExist(hasTestTag("backup_sheet"), 10_000)
+            compose.onNodeWithText("Notas").performClick()
+            compose.onNodeWithText("Recordar este pasaje").assertExists()
+            compose.onNodeWithText("Biblioteca").performClick()
+            compose.onNodeWithText("Ver").performClick()
+            compose.waitUntilAtLeastOneExists(hasTestTag("backup_sheet"), 10_000)
+            InstrumentationRegistry.getInstrumentation().uiAutomation.performGlobalAction(
+                android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+            compose.waitUntilDoesNotExist(hasTestTag("backup_sheet"), 10_000)
+            compose.onNodeWithContentDescription("Abrir ajustes generales").performClick()
+            compose.onNodeWithText("Oscuro").performClick()
+            compose.waitUntil(5_000) { viewModel.state.value.library.appSettings.themeMode == AppThemeMode.DARK }
+            compose.onNodeWithTag("close_settings").performClick()
+            compose.onNodeWithText("Ver").performClick()
+            compose.waitUntilAtLeastOneExists(hasTestTag("backup_sheet"), 10_000)
+            compose.onNodeWithTag("close_backup").performClick()
+            compose.waitUntilDoesNotExist(hasTestTag("backup_sheet"), 10_000)
+            release.countDown()
+            compose.waitUntil(15_000) { !viewModel.state.value.backup.busy }
+            assertNull(viewModel.state.value.backup.error)
+            assertTrue(output.length() > 0)
+            java.util.zip.ZipFile(output).use { assertNotNull(it.getEntry("manifest.json")) }
+            io.luma.reader.data.LibraryWrites.awaitIdle()
+            assertEquals(AppThemeMode.DARK, LibraryRepository(context).load().appSettings.themeMode)
+            compose.onNodeWithText("Estantes").performClick()
+            compose.onNodeWithText("Mis favoritos").assertExists()
+        } finally { release.countDown(); output.delete() }
+    }
+
+    @Test fun driveExplainsItsPermissionBeforeOpeningGoogleAndCanBeCancelled() {
+        seed()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        compose.waitUntilAtLeastOneExists(hasTestTag("book_design-reading"), 30_000)
+        compose.onNodeWithContentDescription("Abrir ajustes generales").performClick()
+        screenshot("ajustes-renovados")
+        compose.onNodeWithTag("general_settings_sheet").performScrollToNode(hasText("Copias de seguridad y Google Drive"))
+        compose.onNodeWithText("Copias de seguridad y Google Drive").performClick()
+        compose.waitUntilAtLeastOneExists(hasTestTag("backup_sheet"), 10_000)
+        compose.onNodeWithTag("backup_sheet").performScrollToNode(hasText("Guardar copia en Drive"))
+        screenshot("copias-renovadas")
+        compose.onNodeWithText("Guardar copia en Drive").performClick()
+        compose.onNodeWithText("Tu copia, en tu Drive").assertExists()
+        compose.onNodeWithText("Continuar con Google").assertExists()
+        screenshot("permiso-drive")
+        compose.onNodeWithText("Ahora no").performClick()
+        compose.onNodeWithText("Tu copia, en tu Drive").assertDoesNotExist()
+        compose.onNodeWithTag("close_backup").performClick()
+        compose.waitUntilDoesNotExist(hasTestTag("backup_sheet"), 10_000)
+        compose.onNodeWithText("Notas").performClick()
+        compose.onNodeWithText("Recordar este pasaje").assertExists()
+    }
+
+    private fun openBackup() {
+        compose.onNodeWithContentDescription("Abrir ajustes generales").performClick()
+        compose.onNodeWithTag("general_settings_sheet").performScrollToNode(hasText("Copias de seguridad y Google Drive"))
+        compose.onNodeWithText("Copias de seguridad y Google Drive").performClick()
+        compose.waitUntilAtLeastOneExists(hasTestTag("backup_sheet"), 10_000)
     }
 
     private fun screenshot(name: String) {

@@ -159,7 +159,26 @@ def main():
     tap(find('Buscar y marcadores'))
     find('Explorar el libro')
     capture('release-herramientas')
-    print('Normal distribution APK: library migration, long press, EPUB rendering and reader tools passed.')
+    # Exercise the redesigned settings and the permission explanation in the
+    # real R8 distribution, without contacting or authenticating with Google.
+    shell('am', 'force-stop', PACKAGE)
+    shell('am', 'start', '-W', '-n', PACKAGE + '/' + ACTIVITY)
+    tap(find('Abrir ajustes generales'))
+    find('Tema de la aplicación')
+    capture('release-ajustes')
+    shell('input', 'swipe', '550', '1400', '550', '550', '450')
+    tap(find('Copias de seguridad y Google Drive'))
+    find('Guardar copia local')
+    capture('release-copias')
+    shell('input', 'swipe', '550', '1400', '550', '550', '450')
+    tap(find('Guardar copia en Drive'))
+    find('Tu copia, en tu Drive')
+    capture('release-permiso-drive')
+    tap(find('Ahora no'))
+    tap(find('Cerrar Copias de seguridad'))
+    tap(find('Notas'))
+    find('Guarda lo que te inspira')
+    print('Normal distribution APK: library migration, long press, EPUB rendering, reader tools, settings and Drive explanation passed.')
 
 
 if __name__ == '__main__':

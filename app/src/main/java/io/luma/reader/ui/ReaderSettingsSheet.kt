@@ -85,8 +85,6 @@ private enum class SettingsTab(val label: String) {
 
 private data class Choice(val id: String?, val label: String)
 
-private val SettingsCoral = Color(0xFFFF715B)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ReaderSettingsSheet(
@@ -122,37 +120,17 @@ internal fun ReaderSettingsSheet(
                     else "general_settings_sheet"
                 )
         ) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        if (compactPreview) "AJUSTE LOCAL" else "PREFERENCIAS",
-                        color = SettingsCoral,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Black
-                    )
-                    Text(
-                        if (compactPreview) "Este libro" else "Tu forma de leer",
-                        style = if (compactPreview) MaterialTheme.typography.headlineSmall
-                        else MaterialTheme.typography.headlineMedium,
-                        maxLines = 1,
-                        fontWeight = FontWeight.Black
-                    )
-                    Text(
-                        when {
-                            compactPreview && isBookOverride ->
-                                "Personalizados solo para este libro"
-                            compactPreview ->
-                                "Usando los generales; cualquier cambio se guardará aquí"
-                            else ->
-                                "Se aplican a las novelas sin personalización propia"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            Column(Modifier.padding(horizontal = 22.dp, vertical = 8.dp)) {
+                SettingsHeader(
+                    title = if (compactPreview) "Este libro" else "Tu forma de leer",
+                    subtitle = when {
+                        compactPreview && isBookOverride -> "Personalizados solo para este libro."
+                        compactPreview -> "Tus cambios se aplicarán solo a este libro."
+                        else -> "Preferencias para los libros sin ajustes propios."
+                    },
+                    onClose = onDismiss,
+                    closeTag = "close_reader_settings"
+                )
                 if (compactPreview && isBookOverride && onUseGlobalSettings != null) {
                     TextButton(onClick = onUseGlobalSettings) { Text("Usar generales") }
                 }
@@ -695,34 +673,36 @@ private fun DropdownSetting(
     onSelected: (Choice) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    Column {
-        SettingLabel(label)
-        Box {
-            OutlinedButton(
-                onClick = { expanded = true },
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                icon()
-                Spacer(Modifier.width(10.dp))
-                Text(selected, modifier = Modifier.weight(1f), maxLines = 1)
-            }
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-                modifier = Modifier.fillMaxWidth(.86f)
-            ) {
-                choices.forEach { choice ->
-                    DropdownMenuItem(
-                        text = { Text(choice.label) },
-                        trailingIcon = {
-                            if (choice.label == selected) Icon(Icons.Default.Check, null)
-                        },
-                        onClick = {
-                            onSelected(choice)
-                            expanded = false
-                        }
-                    )
+    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Column(Modifier.padding(16.dp)) {
+            SettingLabel(label)
+            Box {
+                OutlinedButton(
+                    onClick = { expanded = true },
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    icon()
+                    Spacer(Modifier.width(10.dp))
+                    Text(selected, modifier = Modifier.weight(1f), maxLines = 1)
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    modifier = Modifier.fillMaxWidth(.86f)
+                ) {
+                    choices.forEach { choice ->
+                        DropdownMenuItem(
+                            text = { Text(choice.label) },
+                            trailingIcon = {
+                                if (choice.label == selected) Icon(Icons.Default.Check, null)
+                            },
+                            onClick = {
+                                onSelected(choice)
+                                expanded = false
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -747,11 +727,18 @@ private fun SettingSlider(
     steps: Int,
     onChange: (Float) -> Unit
 ) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-        Text(valueLabel, color = MaterialTheme.colorScheme.primary)
+    Surface(shape = RoundedCornerShape(22.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(10.dp)) {
+                    Text(valueLabel, color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+                }
+            }
+            Slider(value = value, onValueChange = onChange, valueRange = range, steps = steps)
+        }
     }
-    Slider(value = value, onValueChange = onChange, valueRange = range, steps = steps)
 }
 
 private fun themePreviewColors(theme: ReaderTheme): Pair<Color, Color> = when (theme) {

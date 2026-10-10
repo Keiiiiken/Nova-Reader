@@ -43,6 +43,12 @@ fun LumaApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
         }
     }
 
+    LaunchedEffect(state.backup.busy, state.backup.lastResult, state.backup.error) {
+        if (!state.backup.busy && !showBackup) {
+            (state.backup.error ?: state.backup.lastResult)?.let { snackbar.showSnackbar(it) }
+        }
+    }
+
     BackHandler(enabled = activeBook != null) { viewModel.closeBook() }
 
     Surface(modifier) {

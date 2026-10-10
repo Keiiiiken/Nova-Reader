@@ -33,10 +33,12 @@ import java.io.File
 
 data class BackupUiState(
     val busy: Boolean = false,
+    val restoring: Boolean = false,
     val operation: String = "",
     val progress: Float? = null,
     val error: String? = null,
     val driveBackups: List<DriveBackup> = emptyList(),
+    val accountName: String? = null,
     val lastResult: String? = null
 )
 
@@ -72,7 +74,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun flushPersistence() {
-        if (_state.value.loading || _state.value.backup.busy) return
+        if (_state.value.loading || _state.value.backup.restoring) return
         saveJob?.cancel()
         val snapshot = _state.value.library
         LibraryWrites.enqueue {
@@ -114,6 +116,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun openBook(bookId: String) {
+        if (_state.value.backup.restoring) {
+            _state.update { it.copy(message = "Espera a que termine la restauración para abrir tus libros.") }
+            return
+        }
         mutateBook(bookId) { it.copy(lastOpenedAt = System.currentTimeMillis()) }
         _state.update { it.copy(activeBookId = bookId, readerTarget = null) }
     }
@@ -179,6 +185,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteBook(bookId: String) {
+        if (_state.value.backup.busy) {
+            _state.update { it.copy(message = "Espera a que termine la copia antes de borrar libros.") }
+            return
+        }
         val book = _state.value.library.books.firstOrNull { it.id == bookId } ?: return
         viewModelScope.launch(Dispatchers.IO) { repository.deleteBook(book) }
         mutateLibrary { it.copy(books = it.books.filterNot { item -> item.id == bookId }) }
@@ -186,6 +196,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateBookCover(bookId: String, uri: Uri) {
+        if (_state.value.backup.busy) {
+            _state.update { it.copy(message = "Espera a que termine la copia antes de cambiar portadas.") }
+            return
+        }
         val book = _state.value.library.books.firstOrNull { it.id == bookId } ?: return
         viewModelScope.launch {
             val result = runCatching {
@@ -252,6 +266,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearDriveBackups() { _state.update { it.copy(backup = it.backup.copy(driveBackups = emptyList(), lastResult = null)) } }
+    fun selectDriveAccount(name: String?) {
+        if (_state.value.backup.busy || _state.value.backup.accountName == name) return
+        _state.update { it.copy(backup = it.backup.copy(accountName = name, driveBackups = emptyList(), lastResult = null, error = null)) }
+    }
     fun clearBackupError() { _state.update { it.copy(backup = it.backup.copy(error = null)) } }
     fun backupError(message: String) { _state.update { it.copy(backup = it.backup.copy(error = message)) } }
 
@@ -266,7 +284,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         "Copia local guardada"
     }
 
-    fun restoreBackup(uri: Uri) = backupOperation("Restaurando copia local") {
+    fun restoreBackup(uri: Uri) = backupOperation("Restaurando copia local", restoring = true) {
         val service = BackupRepository(getApplication())
         val file = service.copyFrom(uri)
         try { commitRestored(service.restore(file, _state.value.library)) } finally { file.delete() }
@@ -296,7 +314,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val file = BackupRepository(getApplication()).create(_state.value.library)
         try {
             updateBackupOperation("Guardando en Google Drive")
-            DriveBackupClient(token).upload(file, ::backupProgress)
+            val client = DriveBackupClient(token)
+            client.saveLatest(file, ::backupProgress)
+            // Refreshing the list must not report a completed save as a failed upload.
+            try {
+                val files = client.list()
+                _state.update { it.copy(backup = it.backup.copy(driveBackups = files)) }
+            } catch (e: CancellationException) { throw e }
+            catch (_: Exception) { clearDriveBackups() }
         } finally { file.delete() }
         "Copia guardada en Google Drive"
     }
@@ -305,7 +330,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(backup = it.backup.copy(driveBackups = files)) }
         if (files.isEmpty()) "Todavía no hay copias de esta app en Drive" else "Elige la copia que quieres recuperar"
     }
-    fun restoreFromDrive(token: String, backup: DriveBackup) = backupOperation("Descargando copia de Drive") {
+    fun restoreFromDrive(token: String, backup: DriveBackup) = backupOperation("Descargando copia de Drive", restoring = true) {
         val file = File(getApplication<Application>().cacheDir, "drive-restore-${java.util.UUID.randomUUID()}.zip")
         try {
             DriveBackupClient(token).download(backup, file, ::backupProgress)
@@ -318,17 +343,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun updateBackupOperation(label: String) { _state.update { it.copy(backup = it.backup.copy(operation = label, progress = null)) } }
     private fun backupProgress(progress: Float) { _state.update { it.copy(backup = it.backup.copy(progress = progress)) } }
 
-    private fun backupOperation(label: String, operation: suspend () -> String) {
+    private fun backupOperation(label: String, restoring: Boolean = false, operation: suspend () -> String) {
         if (_state.value.backup.busy || _state.value.importing || _state.value.loading) return
         flushPersistence()
-        _state.update { it.copy(backup = it.backup.copy(busy = true, operation = label, progress = null, error = null, lastResult = null)) }
+        _state.update { it.copy(backup = it.backup.copy(busy = true, restoring = restoring, operation = label, progress = null, error = null, lastResult = null)) }
         viewModelScope.launch {
             try {
                 val result = withContext(Dispatchers.IO) { LibraryWrites.awaitIdle(); operation() }
                 _state.update { it.copy(backup = it.backup.copy(lastResult = result)) }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { backupError(e.message ?: "No se pudo completar la copia") }
-            finally { _state.update { it.copy(backup = it.backup.copy(busy = false, progress = null)) } }
+            finally { _state.update { it.copy(backup = it.backup.copy(busy = false, restoring = false, progress = null)) } }
         }
     }
 
@@ -374,7 +399,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun mutateLibrary(deferred: Boolean = false, transform: (LibrarySnapshot) -> LibrarySnapshot) {
-        if (_state.value.loading || _state.value.backup.busy) return
+        if (_state.value.loading || _state.value.backup.restoring) return
         val updated = transform(_state.value.library)
         _state.update { it.copy(library = updated) }
         if (!deferred) flushPersistence()

@@ -11,6 +11,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -31,10 +36,12 @@ import io.luma.reader.drive.DriveBackupClient
 internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismiss: () -> Unit) {
     val activity = LocalContext.current as Activity
     val authorization = remember(activity) { Identity.getAuthorizationClient(activity) }
-    var accountName by rememberSaveable { mutableStateOf<String?>(null) }
+    val accountName = state.accountName
     var pendingAction by rememberSaveable { mutableStateOf<String?>(null) }
     var authorizing by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(accountName) { if (accountName == null) viewModel.clearDriveBackups() }
+    var explanationAction by rememberSaveable { mutableStateOf<String?>(null) }
+    val attached = remember { java.util.concurrent.atomic.AtomicBoolean(true) }
+    DisposableEffect(Unit) { onDispose { attached.set(false) } }
     var localRestore by remember { mutableStateOf<Uri?>(null) }
     var driveRestore by remember { mutableStateOf<DriveBackup?>(null) }
     val latestState by rememberUpdatedState(state)
@@ -61,11 +68,13 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
         val request = AuthorizationRequest.builder().setAccount(Account(name, "com.google"))
             .setRequestedScopes(listOf(Scope(DriveBackupClient.SCOPE))).build()
         authorization.authorize(request).addOnSuccessListener { result ->
+            if (!attached.get()) return@addOnSuccessListener
             if (result.hasResolution()) {
                 result.pendingIntent?.let { authorizationLauncher.launch(IntentSenderRequest.Builder(it.intentSender).build()) }
                     ?: run { authorizing = false; pendingAction = null; viewModel.backupError("No se pudo solicitar el permiso de Drive") }
             } else authorized(result.accessToken)
         }.addOnFailureListener {
+            if (!attached.get()) return@addOnFailureListener
             authorizing = false; pendingAction = null
             viewModel.backupError("No se pudo conectar Google Drive. Comprueba la conexión y la cuenta de Google; puedes guardar una copia local mientras tanto.")
         }
@@ -73,7 +82,7 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
     val accountLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val name = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)
         if (result.resultCode == Activity.RESULT_OK && !name.isNullOrBlank()) {
-            accountName = name
+            viewModel.selectDriveAccount(name)
             pendingAction?.let { requestAuthorization(it, name) }
         } else {
             pendingAction = null; authorizing = false
@@ -96,54 +105,74 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
             }
         }
     }
+    fun explainAndConnect(action: String) {
+        if (accountName == null) explanationAction = action else connect(action)
+    }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { it?.let(viewModel::exportBackup) }
     val notesLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/markdown")) { it?.let(viewModel::exportNotes) }
     val restoreLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { localRestore = it }
     val busy = state.busy || authorizing
-    ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-        LazyColumn(Modifier.fillMaxWidth().testTag("backup_sheet"), contentPadding = PaddingValues(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            item {
-                Text("Copias de seguridad", style = MaterialTheme.typography.headlineMedium)
-                Text("Libros, portadas, progreso, estantes, ajustes, marcadores y notas.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    ModalBottomSheet(onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
+        containerColor = MaterialTheme.colorScheme.background) {
+        Column(Modifier.fillMaxWidth()) {
+            Box(Modifier.padding(horizontal = 22.dp, vertical = 8.dp)) {
+                SettingsHeader("Copias de seguridad", "Tus libros, progreso y notas, protegidos.", onDismiss, "close_backup")
             }
-            if (busy) item {
-                Text(if (authorizing) "Conectando Google Drive…" else state.operation)
-                if (state.progress == null) LinearProgressIndicator(Modifier.fillMaxWidth())
-                else LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
-            }
-            state.error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
-            state.lastResult?.let { item { Text(it, color = MaterialTheme.colorScheme.primary) } }
-            item {
-                Text("En tu dispositivo", style = MaterialTheme.typography.titleMedium)
-                OutlinedButton(onClick = { exportLauncher.launch("NovaReader-copia-${java.time.LocalDate.now()}.zip") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Guardar copia local") }
-                OutlinedButton(onClick = { restoreLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Restaurar copia local") }
-                TextButton(onClick = { notesLauncher.launch("NovaReader-notas.md") }, enabled = !busy) { Text("Exportar notas") }
-            }
-            item {
-                HorizontalDivider()
-                Text("Google Drive", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 14.dp))
-                accountName?.let { name ->
-                    Text(name, style = MaterialTheme.typography.bodySmall)
-                    TextButton(onClick = { accountName = null; viewModel.clearDriveBackups() }, enabled = !busy) { Text("Cambiar cuenta") }
+            LazyColumn(Modifier.fillMaxWidth().testTag("backup_sheet"),
+                contentPadding = PaddingValues(start = 22.dp, end = 22.dp, top = 12.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                if (state.busy) item { BackupProgress(state) }
+                else if (authorizing) item {
+                    Text("Conectando Google Drive…")
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
-                Text("Opcional. Las copias se guardan en el espacio privado de esta app en tu cuenta. Solo necesitas conexión para guardar o recuperar una copia.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(onClick = { connect("save") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Guardar copia en Drive") }
-                OutlinedButton(onClick = { connect("list") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Ver copias de Drive") }
-            }
-            items(state.driveBackups, key = { it.id }) { file ->
-                OutlinedCard(onClick = { if (!busy) driveRestore = file }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(14.dp)) {
-                        Text(file.name, style = MaterialTheme.typography.titleSmall)
-                        Text("${file.modifiedTime.substringBefore('.').replace('T', ' ')} · ${file.size / 1024 / 1024} MB", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("Recuperar esta copia", color = MaterialTheme.colorScheme.primary)
+                state.error?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
+                state.lastResult?.let { item { Text(it, color = MaterialTheme.colorScheme.primary) } }
+                item {
+                    SettingsCard("En tu dispositivo", Icons.Default.Folder) {
+                        Text("Guarda un archivo ZIP donde prefieras. Incluye libros, portadas, estantes, progreso, notas y ajustes.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        OutlinedButton(onClick = { exportLauncher.launch("NovaReader-copia-${java.time.LocalDate.now()}.zip") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Guardar copia local") }
+                        OutlinedButton(onClick = { restoreLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Restaurar copia local") }
+                        TextButton(onClick = { notesLauncher.launch("NovaReader-notas.md") }, enabled = !busy) { Text("Exportar notas") }
                     }
                 }
-            }
-            item {
-                Text("Las copias son manuales. Guardar una copia nueva no borra las anteriores. Si cambias de cuenta, verás las copias de esa cuenta.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.navigationBarsPadding())
+                item {
+                    SettingsCard("Google Drive", Icons.Default.CloudUpload) {
+                        accountName?.let { name ->
+                            Text(name, style = MaterialTheme.typography.bodySmall)
+                            TextButton(onClick = { viewModel.selectDriveAccount(null) }, enabled = !busy) { Text("Cambiar cuenta") }
+                        }
+                        Text("Solo accede al espacio privado de Nova Reader, nunca a tus demás archivos de Drive.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Cada vez que guardas, se actualiza la copia anterior en esta cuenta.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Button(onClick = { explainAndConnect("save") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Guardar copia en Drive") }
+                        OutlinedButton(onClick = { explainAndConnect("list") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Ver copias de Drive") }
+                    }
+                }
+                items(state.driveBackups, key = { it.id }) { file ->
+                    OutlinedCard(onClick = { if (!busy) driveRestore = file }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(14.dp)) {
+                            Text(file.name, style = MaterialTheme.typography.titleSmall)
+                            Text("${file.modifiedTime.substringBefore('.').replace('T', ' ')} · ${file.size / 1024 / 1024} MB", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Recuperar esta copia", color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+                item {
+                    Text("Las copias son manuales. Puedes seguir usando la app mientras guardas. Las copias locales se guardan en el archivo que elijas.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.navigationBarsPadding())
+                }
             }
         }
+    }
+    explanationAction?.let { action ->
+        AlertDialog(onDismissRequest = { explanationAction = null },
+            icon = { Icon(Icons.Default.Security, null) },
+            title = { Text("Tu copia, en tu Drive") },
+            text = { Text("Nova Reader solo puede ver, crear y borrar sus propias copias en un espacio privado de tu cuenta. No puede acceder a tus demás archivos de Drive, Gmail ni Fotos.\n\nGoogle te pedirá permiso para sus «datos de configuración»: ese es el espacio donde guardaremos la copia de tus libros, progreso y notas.") },
+            confirmButton = { TextButton(onClick = { explanationAction = null; connect(action) }) { Text("Continuar con Google") } },
+            dismissButton = { TextButton(onClick = { explanationAction = null }) { Text("Ahora no") } })
     }
     if (localRestore != null || driveRestore != null) {
         AlertDialog(onDismissRequest = { localRestore = null; driveRestore = null },
@@ -151,7 +180,7 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
             text = { Text("Los libros incluidos recuperarán el progreso, las notas y los ajustes de la copia. Los demás libros de tu biblioteca actual se conservarán.") },
             confirmButton = { TextButton(onClick = {
                 localRestore?.let(viewModel::restoreBackup)
-                driveRestore?.let { connect("restore:${it.id}") }
+                driveRestore?.let { explainAndConnect("restore:${it.id}") }
                 localRestore = null; driveRestore = null
             }) { Text("Recuperar") } },
             dismissButton = { TextButton(onClick = { localRestore = null; driveRestore = null }) { Text("Cancelar") } })

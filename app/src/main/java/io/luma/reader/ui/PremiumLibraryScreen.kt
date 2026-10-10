@@ -180,16 +180,25 @@ fun LibraryScreen(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = snackbarHost,
         bottomBar = {
-            LumaDock(
-                selected = section,
-                onSelected = {
-                    focusManager.clearFocus()
-                    // Re-entering Estantes always starts at its own index. This keeps a
-                    // previously opened shelf from looking like a hidden home filter.
-                    selectedShelfId = null
-                    section = it
+            Column {
+                if (state.backup.busy) {
+                    Surface(color = MaterialTheme.colorScheme.primaryContainer) {
+                        Box(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                            BackupProgress(state.backup, onOpenBackup)
+                        }
+                    }
                 }
-            )
+                LumaDock(
+                    selected = section,
+                    onSelected = {
+                        focusManager.clearFocus()
+                        // Re-entering Estantes always starts at its own index. This keeps a
+                        // previously opened shelf from looking like a hidden home filter.
+                        selectedShelfId = null
+                        section = it
+                    }
+                )
+            }
         }
     ) { padding ->
         AnimatedContent(
