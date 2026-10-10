@@ -117,3 +117,5 @@ Las copias de Drive son manuales y necesitan configurar un cliente OAuth Android
 Biblioteca con tarjeta destacada para continuar, portadas tipográficas con detalles geométricos, opciones sobre la portada y títulos con todo el ancho disponible. Estantes con su color elegido y notas en tarjetas de cita. Ajustes separados en Estilo, Biblioteca y Herramientas, con vistas previas de tema y densidad, los cuatro acentos visibles y superficies coherentes en claro y oscuro. Cabeceras con cierre en diccionario y herramientas del lector; las opciones de libro permiten desplazarse.
 
 Consulta [las prioridades pendientes](docs/PRIORIDADES-APP.md) para distinguir las mejoras propuestas de las funciones que ya existen.
+
+[Capturas y validación de 1.9.4](docs/VALIDACION-1.9.4.md).
