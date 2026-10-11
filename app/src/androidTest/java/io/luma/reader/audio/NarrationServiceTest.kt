@@ -52,7 +52,14 @@ class NarrationServiceTest {
         assertTrue(NarrationPlayer.state.value.paused)
         NarrationPlayer.command(context, "play")
         await { NarrationPlayer.state.value.playing && spokenRate.get() == 200 }
-        context.sendBroadcast(android.content.Intent(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY).setPackage(context.packageName))
+        // This protected system broadcast cannot originate from an app UID.
+        // The Google APIs userdebug emulator supplies su for system-event tests;
+        // neither the production app nor its manifest needs extra permissions.
+        val broadcast = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
+            "su 0 am broadcast --receiver-foreground -a android.media.AUDIO_BECOMING_NOISY -p ${context.packageName}"
+        )
+        val result = android.os.ParcelFileDescriptor.AutoCloseInputStream(broadcast).bufferedReader().use { it.readText() }
+        assertTrue("System audio broadcast failed: $result", result.contains("Broadcast completed"))
         await { NarrationPlayer.state.value.paused }
     }
     private fun await(condition: () -> Boolean) {
