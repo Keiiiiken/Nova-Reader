@@ -34,6 +34,12 @@ internal data class NarrationRequest(val book: Book, val settings: ReaderSetting
 internal object NarrationPlayer {
     val state = MutableStateFlow(NarrationState())
     @Volatile var pending: NarrationRequest? = null
+    @Volatile var pendingSettings: Pair<String, ReaderSettings>? = null
+    fun updateSettings(context: Context, bookId: String, settings: ReaderSettings) {
+        if (state.value.bookId != bookId) return
+        pendingSettings = bookId to settings
+        command(context, "settings")
+    }
     fun start(context: Context, request: NarrationRequest) {
         pending = request
         ContextCompat.startForegroundService(context, Intent(context, NarrationService::class.java).setAction("start"))
@@ -52,6 +58,9 @@ class NarrationService : Service() {
     private var offset = 0
     private var chapter = 0
     private var generation = 0
+    private var engineGeneration = 0
+    private var engineReady = false
+    private var playWhenReady = true
     private var sleepJob: Job? = null
     private var nextJob: Job? = null
     private var sleepAt = 0L
@@ -83,6 +92,10 @@ class NarrationService : Service() {
         else startForeground(211, notification())
         when (intent?.action) {
             "start" -> NarrationPlayer.pending?.let { request -> NarrationPlayer.pending = null; begin(request) }
+            "settings" -> NarrationPlayer.pendingSettings?.let { (bookId, settings) ->
+                NarrationPlayer.pendingSettings = null
+                if (request?.book?.id == bookId) updateSettings(settings)
+            }
             "play" -> resume()
             "pause" -> pause()
             "stop" -> stopSelf()
@@ -96,13 +109,17 @@ class NarrationService : Service() {
         }
         return START_NOT_STICKY
     }
-    private fun begin(value: NarrationRequest) {
+    private fun begin(value: NarrationRequest, autoplay: Boolean = true) {
         generation++; nextJob?.cancel(); engine?.stop(); engine?.shutdown(); engine = null
+        engineGeneration++; engineReady = false; playWhenReady = autoplay
         request = value; chaptersReset(value.chapter, value.chunks, value.chunk, value.offset)
-        NarrationPlayer.state.value = NarrationState(bookId = value.book.id, chapter = chapter, paused = true)
-        val initialization = generation
+        val part = chunks.getOrNull(chunk)
+        NarrationPlayer.state.value = NarrationState(bookId = value.book.id, chapter = chapter, paused = true,
+            block = part?.blockIndex ?: 0, start = part?.domOffset(offset) ?: 0,
+            progress = if (chunks.isEmpty()) 0f else chunk.toFloat() / chunks.size, sleepAt = sleepAt)
+        val initialization = engineGeneration
         val init: (Int) -> Unit = { status -> scope.launch {
-            if (initialization != generation) return@launch
+            if (initialization != engineGeneration) return@launch
             if (status == TextToSpeech.SUCCESS) configureAndPlay() else fail("No se pudo iniciar la voz. Revisa el motor de voz instalado.")
         } }
         engine = if (value.settings.ttsEngine == null) TextToSpeech(applicationContext, init) else TextToSpeech(applicationContext, init, value.settings.ttsEngine)
@@ -110,15 +127,41 @@ class NarrationService : Service() {
     private fun chaptersReset(index: Int, values: List<SpeechChunk>, startChunk: Int = 0, startOffset: Int = 0) {
         chapter = index; chunks = values; chunk = startChunk.coerceIn(0, values.lastIndex.coerceAtLeast(0)); offset = startOffset
     }
-    private fun configureAndPlay() {
-        val tts = engine ?: return; val settings = request?.settings ?: return
+    private fun applyVoiceSettings(): Boolean {
+        val tts = engine ?: return false
+        val settings = request?.settings ?: return false
         tts.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
         val voice = settings.ttsVoiceName?.let { name -> tts.voices?.firstOrNull { it.name == name } }
         if (voice != null) tts.voice = voice else {
             val result = tts.setLanguage(if (settings.ttsLanguageTag == "system") Locale.getDefault() else Locale.forLanguageTag(settings.ttsLanguageTag))
-            if (result < TextToSpeech.LANG_AVAILABLE) { fail("Instala una voz para el idioma elegido en los ajustes de Android"); return }
+            if (result < TextToSpeech.LANG_AVAILABLE) { fail("Instala una voz para el idioma elegido en los ajustes de Android"); return false }
         }
         tts.setSpeechRate(settings.ttsRate); tts.setPitch(settings.ttsPitch)
+        return true
+    }
+    private fun updateSettings(settings: ReaderSettings) {
+        val previous = request ?: return
+        if (previous.settings == settings) return
+        val playing = NarrationPlayer.state.value.playing || (!engineReady && playWhenReady)
+        chunks = chunks.map { part -> part.copy(pauseAfterMs = when (part.pauseAfterMs) {
+            previous.settings.ttsParagraphPauseMs -> settings.ttsParagraphPauseMs
+            previous.settings.ttsSentencePauseMs -> settings.ttsSentencePauseMs
+            else -> part.pauseAfterMs
+        }) }
+        if (previous.settings.ttsEngine != settings.ttsEngine) {
+            begin(previous.copy(settings = settings, chapter = chapter, chunks = chunks, chunk = chunk, offset = offset), playing)
+        } else {
+            request = previous.copy(settings = settings)
+            if (engineReady) {
+                if (playing) pause()
+                if (applyVoiceSettings() && playing) resume()
+            }
+        }
+    }
+    private fun configureAndPlay() {
+        val tts = engine ?: return
+        engineReady = true
+        if (!applyVoiceSettings()) return
         tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(id: String?) = Unit
             override fun onDone(id: String?) { scope.launch {
@@ -139,7 +182,7 @@ class NarrationService : Service() {
                 if (id == "nova-$generation") fail("La voz no pudo continuar. Comprueba los datos del motor de voz.")
             } }
         })
-        resume()
+        if (playWhenReady) resume() else publish(playing = false)
     }
     private var utteranceOffset = 0
     private fun speakChunk() {
@@ -157,12 +200,15 @@ class NarrationService : Service() {
     }
     private fun resume() {
         if (engine == null || request == null) return
+        playWhenReady = true
+        if (!engineReady) return
         if (audio.requestAudioFocus(focus) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) { fail("Otra app está usando el audio. Inténtalo de nuevo."); return }
         publish(playing = true)
         speakChunk()
     }
     private fun pause() {
         if (request == null) return
+        playWhenReady = false
         generation++; nextJob?.cancel(); publish(playing = false); engine?.stop(); persist()
         audio.abandonAudioFocusRequest(focus)
     }

@@ -13,6 +13,8 @@ class TestSpeechEngine : TextToSpeechService() {
     override fun onStop() { stopped.set(true) }
     override fun onSynthesizeText(request: SynthesisRequest, callback: SynthesisCallback) {
         stopped.set(false)
+        sendBroadcast(android.content.Intent("io.luma.reader.TEST_TTS_REQUEST")
+            .setPackage(packageName.removeSuffix(".test")).putExtra("rate", request.speechRate))
         callback.start(16000, AudioFormat.ENCODING_PCM_16BIT, 1)
         val silence = ByteArray(3200)
         repeat(60) {

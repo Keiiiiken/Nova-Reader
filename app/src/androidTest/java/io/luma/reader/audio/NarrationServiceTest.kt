@@ -17,7 +17,17 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class NarrationServiceTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
-    @After fun stop() { context.stopService(android.content.Intent(context, NarrationService::class.java)) }
+    private val spokenRate = java.util.concurrent.atomic.AtomicInteger()
+    private val observer = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: android.content.Intent?) { spokenRate.set(intent?.getIntExtra("rate", 0) ?: 0) }
+    }
+    @Before fun observeEngine() {
+        androidx.core.content.ContextCompat.registerReceiver(context, observer, android.content.IntentFilter("io.luma.reader.TEST_TTS_REQUEST"), androidx.core.content.ContextCompat.RECEIVER_EXPORTED)
+    }
+    @After fun stop() {
+        context.stopService(android.content.Intent(context, NarrationService::class.java))
+        context.unregisterReceiver(observer)
+    }
     @Test fun narrationSurvivesClosingActivityAndSupportsPauseResumeAndTimer() {
         if (android.os.Build.VERSION.SDK_INT >= 33) InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(context.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
         val scenario = ActivityScenario.launch(MainActivity::class.java)
@@ -25,7 +35,10 @@ class NarrationServiceTest {
         val settings = ReaderSettings(ttsEngine = InstrumentationRegistry.getInstrumentation().context.packageName, ttsLanguageTag = "es-ES", ttsAutoAdvance = false)
         val chunks = listOf(SpeechBlock(0, "Primera frase para probar la narración. Segunda frase para comprobar la pausa.")).chunkForSpeech()
         InstrumentationRegistry.getInstrumentation().runOnMainSync { NarrationPlayer.start(context, NarrationRequest(book, settings, 0, chunks, 0, 0)) }
-        await { NarrationPlayer.state.value.playing }
+        await { NarrationPlayer.state.value.playing && spokenRate.get() == 100 }
+        NarrationPlayer.updateSettings(context, book.id, settings.copy(ttsRate = 1.5f))
+        await { spokenRate.get() == 150 }
+        assertTrue(NarrationPlayer.state.value.playing)
         scenario.close()
         assertTrue(NarrationPlayer.state.value.playing)
         assertTrue(context.getSystemService(NotificationManager::class.java).activeNotifications.any { it.id == 211 })
@@ -35,8 +48,10 @@ class NarrationServiceTest {
         await { NarrationPlayer.state.value.sleepAt > System.currentTimeMillis() }
         NarrationPlayer.command(context, "timer", 0)
         await { NarrationPlayer.state.value.sleepAt == 0L }
+        NarrationPlayer.updateSettings(context, book.id, settings.copy(ttsRate = 2f))
+        assertTrue(NarrationPlayer.state.value.paused)
         NarrationPlayer.command(context, "play")
-        await { NarrationPlayer.state.value.playing }
+        await { NarrationPlayer.state.value.playing && spokenRate.get() == 200 }
         context.sendBroadcast(android.content.Intent(android.media.AudioManager.ACTION_AUDIO_BECOMING_NOISY).setPackage(context.packageName))
         await { NarrationPlayer.state.value.paused }
     }
