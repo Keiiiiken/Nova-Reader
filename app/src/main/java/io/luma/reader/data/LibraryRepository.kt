@@ -95,11 +95,11 @@ class LibraryRepository(context: Context) {
     internal fun encodeSnapshot(snapshot: LibrarySnapshot): String = encode(snapshot).toString()
     internal fun decodeSnapshot(payload: String, checkFiles: Boolean = true): LibrarySnapshot = decode(JSONObject(payload), checkFiles)
 
-    fun deleteBook(book: Book) {
+    fun deleteBook(book: Book) { synchronized(LibraryFiles.lock) {
         File(book.epubPath).parentFile?.takeIf {
             it.canonicalPath.startsWith(File(appContext.filesDir, "library").canonicalPath + File.separator)
         }?.deleteRecursively()
-    }
+    } }
 
     fun createCollection(name: String, colorIndex: Int): BookCollection =
         BookCollection(UUID.randomUUID().toString(), name.trim(), colorIndex)

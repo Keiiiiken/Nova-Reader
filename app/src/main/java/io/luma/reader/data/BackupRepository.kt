@@ -16,7 +16,7 @@ import java.util.zip.ZipOutputStream
 
 internal class BackupRepository(private val context: Context) {
     private val codec = LibraryRepository(context)
-    fun create(snapshot: LibrarySnapshot): File {
+    fun create(snapshot: LibrarySnapshot, checkCancelled: () -> Unit = {}): File = synchronized(LibraryFiles.lock) {
         val file = File(context.cacheDir, "nova-backup-${UUID.randomUUID()}.zip")
         try {
             ZipOutputStream(file.outputStream().buffered()).use { zip ->
@@ -26,19 +26,20 @@ internal class BackupRepository(private val context: Context) {
                 zip.putNextEntry(ZipEntry("manifest.json"))
                 zip.write(manifest.toString().toByteArray(Charsets.UTF_8)); zip.closeEntry()
                 snapshot.books.forEach { book ->
+                    checkCancelled()
                     require(ID.matches(book.id)) { "Identificador de libro inválido" }
                     val epub = File(book.epubPath)
                     require(epub.isFile) { "No se encuentra el EPUB de ${book.title}" }
                     zip.putNextEntry(ZipEntry("books/${book.id}/book.epub"))
-                    epub.inputStream().use { copyLimited(it, zip, MAX_EPUB) }; zip.closeEntry()
+                    epub.inputStream().use { copyLimited(it, zip, MAX_EPUB, checkCancelled) }; zip.closeEntry()
                     book.coverPath?.let(::File)?.takeIf { it.isFile }?.let { cover ->
                         zip.putNextEntry(ZipEntry("books/${book.id}/cover.image"))
-                        cover.inputStream().use { copyLimited(it, zip, MAX_COVER) }; zip.closeEntry()
+                        cover.inputStream().use { copyLimited(it, zip, MAX_COVER, checkCancelled) }; zip.closeEntry()
                     }
                 }
             }
             require(file.length() <= MAX_BACKUP) { "La copia supera 2 GiB" }
-            return file
+            file
         } catch (error: Throwable) { file.delete(); throw error }
     }
 
@@ -117,10 +118,11 @@ internal class BackupRepository(private val context: Context) {
         private const val MAX_EPUB = 512L * 1024 * 1024
         private const val MAX_COVER = 32L * 1024 * 1024
         private val ID = Regex("[A-Za-z0-9_-]{1,128}")
-        internal fun copyLimited(input: InputStream, output: OutputStream, limit: Long): Long {
+        internal fun copyLimited(input: InputStream, output: OutputStream, limit: Long, checkCancelled: () -> Unit = {}): Long {
             var total = 0L
             val buffer = ByteArray(64 * 1024)
             while (true) {
+                checkCancelled()
                 val count = input.read(buffer)
                 if (count < 0) break
                 total += count

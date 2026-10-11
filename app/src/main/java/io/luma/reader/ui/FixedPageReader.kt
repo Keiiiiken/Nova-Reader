@@ -32,7 +32,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 internal fun FixedPageReader(book: Book, onBack: () -> Unit, onPosition: (Int) -> Unit,
     onReadingTime: (Long) -> Unit, onBookmark: (ReaderBookmark) -> Unit) {

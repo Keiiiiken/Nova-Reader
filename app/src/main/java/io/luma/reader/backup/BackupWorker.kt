@@ -16,6 +16,8 @@ import io.luma.reader.data.BackupRepository
 import io.luma.reader.data.LibraryRepository
 import io.luma.reader.data.LibraryWrites
 import io.luma.reader.drive.DriveBackupClient
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
@@ -49,7 +51,16 @@ internal object BackupJobs {
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(PERIODIC, ExistingPeriodicWorkPolicy.UPDATE, request)
         prefs.edit().putLong("hours", hours).putBoolean("wifi", wifiOnly).apply()
     }
-    fun cancel(context: Context) { WorkManager.getInstance(context).cancelUniqueWork(MANUAL) }
+    suspend fun cancel(context: Context) = withContext(Dispatchers.IO) {
+        val manager = WorkManager.getInstance(context)
+        manager.cancelUniqueWork(MANUAL).result.get()
+        if (manager.getWorkInfosForUniqueWork(PERIODIC).get().any { it.state == WorkInfo.State.RUNNING }) {
+            manager.cancelUniqueWork(PERIODIC).result.get()
+            val prefs = preferences(context)
+            val hours = prefs.getLong("hours", 0)
+            if (hours > 0) schedule(context, hours, prefs.getBoolean("wifi", true))
+        }
+    }
     private fun constraints(destination: String, wifi: Boolean) = Constraints.Builder().setRequiresStorageNotLow(true)
         .setRequiredNetworkType(if (destination == "drive") { if (wifi) NetworkType.UNMETERED else NetworkType.CONNECTED } else NetworkType.NOT_REQUIRED).build()
     suspend fun <T> exclusive(block: suspend () -> T): T = mutex.withLock { block() }
@@ -71,7 +82,8 @@ internal class BackupWorker(context: Context, params: WorkerParameters) : Corout
                 setProgress(workDataOf("label" to "Preparando copia"))
                 LibraryWrites.awaitIdle()
                 val snapshot = LibraryRepository(applicationContext).load()
-                val file = BackupRepository(applicationContext).create(snapshot)
+                val operationContext = currentCoroutineContext()
+                val file = BackupRepository(applicationContext).create(snapshot) { operationContext.ensureActive() }
                 try {
                     if (inputData.getString("destination") == "drive") {
                         setProgress(workDataOf("label" to "Guardando en Google Drive"))
@@ -83,7 +95,7 @@ internal class BackupWorker(context: Context, params: WorkerParameters) : Corout
                     } else {
                         val uri = Uri.parse(requireNotNull(inputData.getString("uri")))
                         applicationContext.contentResolver.openOutputStream(uri, "wt")?.use { output ->
-                            file.inputStream().use { BackupRepository.copyLimited(it, output, BackupRepository.MAX_BACKUP) }
+                            file.inputStream().use { BackupRepository.copyLimited(it, output, BackupRepository.MAX_BACKUP) { operationContext.ensureActive() } }
                         } ?: error("No se pudo abrir el destino. Elige de nuevo dónde guardar")
                     }
                 } finally { file.delete() }

@@ -22,3 +22,6 @@ internal object LibraryWrites {
     fun enqueue(block: () -> Unit) { executor.execute(block) }
     fun awaitIdle() { executor.submit {}.get() }
 }
+
+/** Guards book files while a backup snapshot is being packed. */
+internal object LibraryFiles { val lock = Any() }

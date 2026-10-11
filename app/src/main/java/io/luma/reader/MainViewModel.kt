@@ -365,7 +365,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_state.value.backup.busy || _state.value.backup.accountName == name) return
         _state.update { it.copy(backup = it.backup.copy(accountName = name, driveBackups = emptyList(), lastResult = null, error = null)) }
     }
-    fun clearBackupError() { _state.update { it.copy(backup = it.backup.copy(error = null)) } }
+    fun clearBackupError() { io.luma.reader.backup.BackupJobs.preferences(getApplication()).edit().remove("lastError").apply(); _state.update { it.copy(backup = it.backup.copy(error = null)) } }
     fun backupError(message: String) { _state.update { it.copy(backup = it.backup.copy(error = message)) } }
 
     fun exportBackup(uri: Uri) {
@@ -409,11 +409,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         io.luma.reader.backup.BackupJobs.enqueue(getApplication(), "drive", account = account)
     }
     fun scheduleBackup(hours: Long, wifi: Boolean) {
+        val prefs = io.luma.reader.backup.BackupJobs.preferences(getApplication())
+        if (hours > 0 && prefs.getString("destination", null) == "drive" && prefs.getString("account", null) != _state.value.backup.accountName) {
+            backupError("Guarda primero una copia en la cuenta elegida antes de programarla"); return
+        }
         runCatching { io.luma.reader.backup.BackupJobs.schedule(getApplication(), hours, wifi) }
             .onSuccess { _state.update { it.copy(backup = it.backup.copy(scheduleHours = hours, wifiOnly = wifi)) } }
             .onFailure { backupError(it.message ?: "Guarda primero una copia") }
     }
-    fun cancelBackup() = io.luma.reader.backup.BackupJobs.cancel(getApplication())
+    fun cancelBackup() { viewModelScope.launch { io.luma.reader.backup.BackupJobs.cancel(getApplication()) } }
     private fun observeBackupJobs() {
         val context = getApplication<Application>()
         val prefs = io.luma.reader.backup.BackupJobs.preferences(context)

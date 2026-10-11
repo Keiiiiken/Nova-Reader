@@ -36,8 +36,15 @@ import io.luma.reader.drive.DriveBackupClient
 internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismiss: () -> Unit) {
     val activity = LocalContext.current as Activity
     val syncPreview by viewModel.syncPreview.collectAsState()
-    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
-    fun askNotifications() { if (android.os.Build.VERSION.SDK_INT >= 33) notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+    var afterNotificationPermission by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        afterNotificationPermission?.invoke(); afterNotificationPermission = null
+    }
+    fun withNotifications(action: () -> Unit) {
+        if (android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(activity, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            afterNotificationPermission = action; notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        } else action()
+    }
     val authorization = remember(activity) { Identity.getAuthorizationClient(activity) }
     val accountName = state.accountName
     var pendingAction by rememberSaveable { mutableStateOf<String?>(null) }
@@ -138,7 +145,7 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
                 item {
                     SettingsCard("En tu dispositivo", Icons.Default.Folder) {
                         Text("Guarda un archivo ZIP donde prefieras. Incluye libros, portadas, estantes, progreso, notas y ajustes.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        OutlinedButton(onClick = { askNotifications(); exportLauncher.launch("NovaReader-copia.zip") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Guardar copia local") }
+                        OutlinedButton(onClick = { withNotifications { exportLauncher.launch("NovaReader-copia.zip") } }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Guardar copia local") }
                         OutlinedButton(onClick = { restoreLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Restaurar copia local") }
                         TextButton(onClick = { notesLauncher.launch("NovaReader-notas.md") }, enabled = !busy) { Text("Exportar notas") }
                     }
@@ -151,7 +158,7 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
                         }
                         Text("Solo accede al espacio privado de Nova Reader, nunca a tus demás archivos de Drive.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Cada vez que guardas, se actualiza la copia anterior en esta cuenta.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Button(onClick = { askNotifications(); explainAndConnect("save") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Guardar copia en Drive") }
+                        Button(onClick = { withNotifications { explainAndConnect("save") } }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Guardar copia en Drive") }
                         OutlinedButton(onClick = { explainAndConnect("list") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Ver copias de Drive") }
                     }
                 }
@@ -170,7 +177,7 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
                         Text("Destino: ${if (state.destination == "drive") "Google Drive" else if (state.destination == "local") "Archivo local elegido" else "Guarda primero una copia"}", style = MaterialTheme.typography.bodySmall)
                         listOf(0L to "Solo manuales", 24L to "Diaria", 168L to "Semanal").forEach { (hours, title) ->
                             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                RadioButton(selected = state.scheduleHours == hours, onClick = { askNotifications(); viewModel.scheduleBackup(hours, state.wifiOnly) }, enabled = !busy && (state.destination != null || hours == 0L))
+                                RadioButton(selected = state.scheduleHours == hours, onClick = { withNotifications { viewModel.scheduleBackup(hours, state.wifiOnly) } }, enabled = !busy && (state.destination != null || hours == 0L))
                                 Text(title)
                             }
                         }

@@ -187,7 +187,7 @@ internal fun GeneralSettingsSheet(
         }
     }
     if (showCredits) AlertDialog(onDismissRequest = { showCredits = false }, title = { Text("Diccionario y créditos") },
-        text = { Text("Definiciones de Wikcionario en español, extraídas por Kaikki/Wiktextract y adaptadas a un índice local. Licencia CC BY-SA 4.0. Fuente: https://es.wiktionary.org · https://kaikki.org/eswiktionary/ · Licencia: https://creativecommons.org/licenses/by-sa/4.0/") },
+        text = { Text("Definiciones de Wikcionario en español, extraídas por Kaikki/Wiktextract y adaptadas a un índice local. Licencia CC BY-SA 4.0. Fuente: https://es.wiktionary.org · https://kaikki.org/eswiktionary/ · Licencia: https://creativecommons.org/licenses/by-sa/4.0/\n\nTipografías: Literata, EB Garamond, Libre Baskerville, Lora, Noto Sans, Atkinson Hyperlegible y Roboto Mono. SIL Open Font License 1.1. Licencias completas incluidas con la aplicación en assets/fonts; fuentes y comprobaciones en docs/TIPOGRAFIAS.md del repositorio.") },
         confirmButton = { TextButton(onClick = { showCredits = false }) { Text("Cerrar") } })
 }
 
