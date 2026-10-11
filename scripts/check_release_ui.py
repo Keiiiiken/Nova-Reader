@@ -109,6 +109,8 @@ def seed():
     payload = json.dumps(dict(books=[book], collections=[], grid=True), ensure_ascii=False)
     prefs = '<map><string name="library_state_v1">' + escape(payload) + '</string></map>'
     private_file('shared_prefs/luma_library.xml', prefs.encode())
+    private_file('shared_prefs/nova_backup_jobs.xml', b'<map/>')
+    private_file('shared_prefs/nova_narration.xml', b'<map/>')
 
 
 def install_distribution():
@@ -138,6 +140,9 @@ def install_distribution():
 def main():
     seed()
     install_distribution()
+    # This smoke test covers app UI; grant the separate Android notification
+    # permission so the operating-system dialog does not obscure that UI.
+    shell('pm', 'grant', PACKAGE, 'android.permission.POST_NOTIFICATIONS')
     shell('input', 'keyevent', 'KEYCODE_WAKEUP')
     shell('wm', 'dismiss-keyguard')
     shell('am', 'start', '-W', '-n', PACKAGE + '/' + ACTIVITY)
