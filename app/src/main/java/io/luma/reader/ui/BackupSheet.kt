@@ -35,6 +35,9 @@ import io.luma.reader.drive.DriveBackupClient
 @Composable
 internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismiss: () -> Unit) {
     val activity = LocalContext.current as Activity
+    val syncPreview by viewModel.syncPreview.collectAsState()
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    fun askNotifications() { if (android.os.Build.VERSION.SDK_INT >= 33) notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
     val authorization = remember(activity) { Identity.getAuthorizationClient(activity) }
     val accountName = state.accountName
     var pendingAction by rememberSaveable { mutableStateOf<String?>(null) }
@@ -52,6 +55,7 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
         if (token.isNullOrBlank()) { viewModel.backupError("No se pudo conectar Google Drive. Puedes seguir usando copias locales."); return }
         when {
             action == "save" -> viewModel.saveToDrive(token)
+            action == "sync" -> viewModel.prepareSync(token)
             action == "list" -> viewModel.listDriveBackups(token)
             action?.startsWith("restore:") == true -> latestState.driveBackups.firstOrNull { it.id == action.substringAfter(':') }
                 ?.let { viewModel.restoreFromDrive(token, it) }
@@ -124,7 +128,7 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
             LazyColumn(Modifier.fillMaxWidth().testTag("backup_sheet"),
                 contentPadding = PaddingValues(start = 22.dp, end = 22.dp, top = 12.dp, bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                if (state.busy) item { BackupProgress(state) }
+                if (state.busy) item { BackupProgress(state); if (!state.restoring) TextButton(onClick = viewModel::cancelBackup) { Text("Cancelar copia") } }
                 else if (authorizing) item {
                     Text("Conectando Google Drive…")
                     LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -134,7 +138,7 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
                 item {
                     SettingsCard("En tu dispositivo", Icons.Default.Folder) {
                         Text("Guarda un archivo ZIP donde prefieras. Incluye libros, portadas, estantes, progreso, notas y ajustes.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        OutlinedButton(onClick = { exportLauncher.launch("NovaReader-copia-${java.time.LocalDate.now()}.zip") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Guardar copia local") }
+                        OutlinedButton(onClick = { askNotifications(); exportLauncher.launch("NovaReader-copia.zip") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Guardar copia local") }
                         OutlinedButton(onClick = { restoreLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Restaurar copia local") }
                         TextButton(onClick = { notesLauncher.launch("NovaReader-notas.md") }, enabled = !busy) { Text("Exportar notas") }
                     }
@@ -147,7 +151,7 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
                         }
                         Text("Solo accede al espacio privado de Nova Reader, nunca a tus demás archivos de Drive.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text("Cada vez que guardas, se actualiza la copia anterior en esta cuenta.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Button(onClick = { explainAndConnect("save") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Guardar copia en Drive") }
+                        Button(onClick = { askNotifications(); explainAndConnect("save") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Guardar copia en Drive") }
                         OutlinedButton(onClick = { explainAndConnect("list") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Ver copias de Drive") }
                     }
                 }
@@ -161,11 +165,54 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
                     }
                 }
                 item {
-                    Text("Las copias son manuales. Puedes seguir usando la app mientras guardas. Las copias locales se guardan en el archivo que elijas.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SettingsCard("Copias programadas", Icons.Default.CloudUpload) {
+                        Text(if (state.lastSuccess == 0L) "Todavía no hay una copia completada" else "Última copia: ${java.text.DateFormat.getDateTimeInstance().format(java.util.Date(state.lastSuccess))}")
+                        Text("Destino: ${if (state.destination == "drive") "Google Drive" else if (state.destination == "local") "Archivo local elegido" else "Guarda primero una copia"}", style = MaterialTheme.typography.bodySmall)
+                        listOf(0L to "Solo manuales", 24L to "Diaria", 168L to "Semanal").forEach { (hours, title) ->
+                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                RadioButton(selected = state.scheduleHours == hours, onClick = { askNotifications(); viewModel.scheduleBackup(hours, state.wifiOnly) }, enabled = !busy && (state.destination != null || hours == 0L))
+                                Text(title)
+                            }
+                        }
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Text("Solo Wi-Fi para Drive", Modifier.weight(1f))
+                            Switch(checked = state.wifiOnly, onCheckedChange = { viewModel.scheduleBackup(state.scheduleHours, it) }, enabled = !busy)
+                        }
+                        Text("Android elige la hora según batería y conexión. Si fuerzas el cierre de la app, las tareas se recuperan al volver a abrirla.", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                item {
+                    SettingsCard("Entre dispositivos", Icons.Default.CloudUpload) {
+                        Text("Sincroniza progreso, estados, notas y marcadores de los mismos archivos importados en tus dispositivos. Revisarás qué posición conservar si son distintas. No envía los libros ni sustituye tu copia de seguridad.")
+                        OutlinedButton(onClick = { explainAndConnect("sync") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Sincronizar ahora") }
+                    }
+                }
+                item {
+                    Text("Puedes programar tus copias. Puedes seguir usando la app mientras guardas. Las copias locales se guardan en el archivo que elijas.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.navigationBarsPadding())
                 }
             }
         }
+    }
+    syncPreview?.let { preview ->
+        var remoteIds by remember(preview) { mutableStateOf(emptySet<String>()) }
+        AlertDialog(onDismissRequest = viewModel::cancelSync, title = { Text("Revisar sincronización") }, text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { Text("Se combinan notas y marcadores sin descartar versiones diferentes. Si una nota eliminada sigue en otro dispositivo, volverá para que puedas revisarla.") }
+                if (preview.conflicts.isEmpty()) item { Text("No hay posiciones en conflicto. Se enviará también el progreso de este dispositivo.") }
+                items(preview.conflicts, key = { it.bookId }) { conflict ->
+                    Column {
+                        Text(conflict.title, style = MaterialTheme.typography.titleMedium)
+                        Text("Aquí: ${(conflict.local.progress * 100).toInt()}% · Otro dispositivo: ${(conflict.remote.progress * 100).toInt()}%")
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Checkbox(checked = conflict.bookId in remoteIds, onCheckedChange = { remoteIds = if (it) remoteIds + conflict.bookId else remoteIds - conflict.bookId })
+                            Text("Usar posición del otro dispositivo")
+                        }
+                    }
+                }
+            }
+        }, confirmButton = { TextButton(enabled = !state.busy, onClick = { viewModel.applySync(remoteIds) }) { Text("Sincronizar") } },
+            dismissButton = { TextButton(enabled = !state.busy, onClick = viewModel::cancelSync) { Text("Cancelar") } })
     }
     explanationAction?.let { action ->
         AlertDialog(onDismissRequest = { explanationAction = null },

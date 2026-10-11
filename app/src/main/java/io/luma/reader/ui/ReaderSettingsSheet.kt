@@ -62,6 +62,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -439,6 +440,8 @@ private fun VoiceSettings(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxSize().testTag("reader_voice_options")
     ) {
+        item { NarrationTimer() }
+
         item {
             DropdownSetting(
                 label = "Motor de voz",
@@ -772,5 +775,22 @@ private fun ReaderFont.previewFamily(): FontFamily {
     return remember(asset) {
         if (asset == null) FontFamily.Default
         else FontFamily(android.graphics.Typeface.createFromAsset(context.assets, "fonts/$asset.ttf"))
+    }
+}
+
+@Composable
+private fun NarrationTimer() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val state by io.luma.reader.audio.NarrationPlayer.state.collectAsState()
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Temporizador para dormir", style = MaterialTheme.typography.titleMedium)
+        Text(if (state.sleepAt == 0L) "Sin temporizador" else "Se pausará a las ${java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(state.sleepAt))}", style = MaterialTheme.typography.bodySmall)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(listOf(0, 10, 20, 30, 60)) { minutes ->
+                OutlinedButton(enabled = state.bookId != null, onClick = { io.luma.reader.audio.NarrationPlayer.command(context, "timer", minutes) }) { Text(if (minutes == 0) "Desactivar" else "$minutes min") }
+            }
+        }
+        if (state.bookId == null) Text("Inicia la narración para programar la pausa.", style = MaterialTheme.typography.bodySmall)
+        else TextButton(onClick = { io.luma.reader.audio.NarrationPlayer.command(context, "stop") }) { Text("Detener narración") }
     }
 }

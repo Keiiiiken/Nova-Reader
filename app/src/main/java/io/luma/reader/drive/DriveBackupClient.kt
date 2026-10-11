@@ -15,11 +15,11 @@ import javax.net.ssl.HttpsURLConnection
 data class DriveBackup(val id: String, val name: String, val modifiedTime: String, val size: Long)
 
 /** Uses only drive.appdata. Access tokens remain in memory for one user-initiated operation. */
-internal class DriveBackupClient(private val accessToken: String, private val connectionFactory: (URL) -> HttpsURLConnection = { it.openConnection() as HttpsURLConnection }) {
+internal class DriveBackupClient(private val accessToken: String, private val connectionFactory: (URL) -> HttpsURLConnection = { it.openConnection() as HttpsURLConnection }, private val kind: String = "novaBackup", private val fileName: String? = null) {
     suspend fun list(): List<DriveBackup> = listPage(null).first
 
     private suspend fun listPage(pageToken: String?): Pair<List<DriveBackup>, String?> {
-        val q = "trashed = false and appProperties has { key='novaBackup' and value='1' }"
+        val q = "trashed = false and appProperties has { key='$kind' and value='1' }"
         val url = "$API/files?spaces=appDataFolder&pageSize=100&orderBy=modifiedTime%20desc&fields=nextPageToken,files(id,name,modifiedTime,size)&q=${encode(q)}" +
             (pageToken?.let { "&pageToken=${encode(it)}" } ?: "")
         return connection(url).useConnection { request ->
@@ -59,8 +59,8 @@ internal class DriveBackupClient(private val accessToken: String, private val co
 
     suspend fun upload(file: File, replaceId: String? = null, onProgress: (Float) -> Unit) {
         require(file.length() <= BackupRepository.MAX_BACKUP) { "La copia supera 2 GiB" }
-        val metadata = JSONObject().put("name", "NovaReader-${java.text.SimpleDateFormat("yyyy-MM-dd-HHmmss", java.util.Locale.US).format(java.util.Date())}.zip")
-            .put("appProperties", JSONObject().put("novaBackup", "1").put("formatVersion", "1"))
+        val metadata = JSONObject().put("name", fileName ?: "NovaReader-${java.text.SimpleDateFormat("yyyy-MM-dd-HHmmss", java.util.Locale.US).format(java.util.Date())}.zip")
+            .put("appProperties", JSONObject().put(kind, "1").put("formatVersion", "1"))
         if (replaceId == null) metadata.put("parents", JSONArray().put("appDataFolder"))
         val target = "https://www.googleapis.com/upload/drive/v3/files" + (replaceId?.let { "/${encode(it)}" } ?: "")
         val session = connection("$target?uploadType=resumable&fields=id,name", if (replaceId == null) "POST" else "PATCH").useConnection { request ->

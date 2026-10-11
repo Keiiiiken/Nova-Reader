@@ -81,6 +81,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.collectAsState
+import kotlinx.coroutines.launch
+import io.luma.reader.audio.NarrationPlayer
+import io.luma.reader.audio.NarrationRequest
+import io.luma.reader.model.weightedProgress
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -163,7 +169,7 @@ private data class AnnotationDraft(
     val createdAt: Long = System.currentTimeMillis()
 )
 
-private data class SpeechChunk(
+internal data class SpeechChunk(
     val text: String,
     val pauseAfterMs: Int,
     val blockIndex: Int,
@@ -172,7 +178,7 @@ private data class SpeechChunk(
     val sourceOffsets: IntArray
 )
 
-private data class SpeechBlock(
+internal data class SpeechBlock(
     val blockIndex: Int,
     val text: String
 )
@@ -397,21 +403,9 @@ fun ReaderScreen(
     val colors = readingColors(settings.theme)
     val chapter = book.chapters[chapterIndex]
 
-    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
-    var ttsReady by remember { mutableStateOf(false) }
-    var ttsInitRequested by remember { mutableStateOf(false) }
-    var pendingNarrationStart by remember { mutableStateOf(false) }
-    var pendingNarrationSelection by remember { mutableStateOf<SelectionData?>(null) }
-    var speaking by remember { mutableStateOf(false) }
-    var narrationChunks by remember(book.id) { mutableStateOf(emptyList<SpeechChunk>()) }
-    var narrationChapter by remember(book.id) { mutableIntStateOf(-1) }
-    var narrationChunk by remember(book.id) { mutableIntStateOf(0) }
-    var narrationOffset by remember(book.id) { mutableIntStateOf(0) }
-    var narrationEndOffset by remember(book.id) { mutableIntStateOf(0) }
-    var narrationPaused by remember(book.id) { mutableStateOf(false) }
-    var narrationAutoAdvanceTarget by remember(book.id) { mutableIntStateOf(-1) }
-    var narrationStartWhenPageReady by remember(book.id) { mutableStateOf(false) }
-    var lastNarrationBlock by remember(book.id) { mutableIntStateOf(-1) }
+    val narration by NarrationPlayer.state.collectAsState()
+    val speaking = narration.bookId == book.id && narration.playing
+    val notificationPermission = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
     val latestReaderSettings = rememberUpdatedState(settings)
     val latestChapterIndex = rememberUpdatedState(chapterIndex)
     val latestChapterProgress = rememberUpdatedState(chapterProgress)
@@ -449,17 +443,7 @@ fun ReaderScreen(
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
                     startTimer()
-                    if ((speaking || narrationPaused) && narrationChapter == chapterIndex) {
-                        narrationChunks.getOrNull(narrationChunk)?.let { chunk ->
-                            webView?.showNarrationPosition(
-                                blockIndex = chunk.blockIndex,
-                                startOffset = chunk.domOffset(narrationOffset),
-                                endOffset = chunk.endOffset,
-                                follow = true
-                            )
-                            lastNarrationBlock = chunk.blockIndex
-                        }
-                    }
+
                 }
                 Lifecycle.Event.ON_PAUSE,
                 Lifecycle.Event.ON_STOP,
@@ -481,130 +465,15 @@ fun ReaderScreen(
         }
     }
 
-    DisposableEffect(settings.ttsEngine, ttsInitRequested) {
-        ttsReady = false
-        val engine = if (!ttsInitRequested) null else if (settings.ttsEngine == null) {
-            TextToSpeech(context) { status -> ttsReady = status == TextToSpeech.SUCCESS }
-        } else {
-            TextToSpeech(
-                context,
-                { status -> ttsReady = status == TextToSpeech.SUCCESS },
-                settings.ttsEngine
-            )
-        }
-        engine?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) {
-                val position = utteranceId.narrationPosition()
-                activity.runOnUiThread {
-                    position?.let { (chapter, chunk, offset) ->
-                        if (chapter == latestChapterIndex.value) {
-                            narrationChapter = chapter
-                            narrationChunk = chunk
-                            narrationOffset = offset
-                            narrationEndOffset = narrationChunks.getOrNull(chunk)?.text?.length ?: offset
-                        }
-                    }
-                    if (!narrationPaused) speaking = true
-                }
+    LaunchedEffect(narration, webView) {
+        if (narration.bookId == book.id && (narration.playing || narration.paused)) {
+            if (narration.chapter != chapterIndex) {
+                chapterIndex = narration.chapter.coerceIn(book.chapters.indices)
+                chapterProgress = narration.progress
+                chapterAnchor = ReadingAnchor(narration.block, narration.start)
             }
-
-            override fun onDone(utteranceId: String?) {
-                val position = utteranceId.narrationPosition()
-                activity.runOnUiThread {
-                    // stop() can still dispatch onDone. Keep the exact chunk
-                    // captured for pause/resume instead of advancing it.
-                    if (!narrationPaused) {
-                        position?.let { (_, chunk, _) ->
-                            narrationChunk = (chunk + 1).coerceAtMost(narrationChunks.lastIndex.coerceAtLeast(0))
-                            narrationOffset = 0
-                            narrationEndOffset = narrationChunks.getOrNull(narrationChunk)?.text?.length ?: 0
-                        }
-                        if (utteranceId?.endsWith("_final") == true) {
-                            val completedChapter = position?.first ?: latestChapterIndex.value
-                            if (
-                                latestReaderSettings.value.ttsAutoAdvance &&
-                                completedChapter < book.chapters.lastIndex
-                            ) {
-                                narrationAutoAdvanceTarget = completedChapter + 1
-                            } else {
-                                speaking = false
-                                narrationPaused = false
-                                narrationChunk = 0
-                                narrationOffset = 0
-                                narrationEndOffset = 0
-                                lastNarrationBlock = -1
-                                webView?.clearNarrationPosition()
-                            }
-                        }
-                    }
-                }
-            }
-
-            override fun onRangeStart(
-                utteranceId: String?,
-                start: Int,
-                end: Int,
-                frame: Int
-            ) {
-                val position = utteranceId.narrationPosition() ?: return
-                activity.runOnUiThread {
-                    val (chapter, chunk, baseOffset) = position
-                    if (!narrationPaused && chapter == latestChapterIndex.value) {
-                        narrationChapter = chapter
-                        narrationChunk = chunk
-                        narrationOffset = baseOffset + start
-                        narrationEndOffset = baseOffset + end
-                    }
-                }
-            }
-
-            @Deprecated("Deprecated in Android")
-            override fun onError(utteranceId: String?) {
-                activity.runOnUiThread {
-                    speaking = false
-                    webView?.clearNarrationPosition()
-                }
-            }
-
-            override fun onError(utteranceId: String?, errorCode: Int) {
-                activity.runOnUiThread {
-                    speaking = false
-                    webView?.clearNarrationPosition()
-                }
-            }
-        })
-        tts = engine
-        onDispose {
-            engine?.stop()
-            engine?.shutdown()
-            if (tts === engine) tts = null
-        }
-    }
-
-    LaunchedEffect(
-        speaking,
-        narrationPaused,
-        narrationChapter,
-        narrationChunk,
-        narrationOffset,
-        narrationEndOffset,
-        webView,
-        chapterIndex
-    ) {
-        if ((speaking || narrationPaused) && narrationChapter == chapterIndex) {
-            narrationChunks.getOrNull(narrationChunk)?.let { chunk ->
-                val shouldFollow = chunk.blockIndex != lastNarrationBlock
-                webView?.showNarrationPosition(
-                    blockIndex = chunk.blockIndex,
-                    startOffset = chunk.domOffset(narrationOffset),
-                    endOffset = if (narrationEndOffset > narrationOffset) {
-                        chunk.domOffset(narrationEndOffset)
-                    } else chunk.endOffset,
-                    follow = shouldFollow
-                )
-                lastNarrationBlock = chunk.blockIndex
-            }
-        }
+            webView?.showNarrationPosition(narration.block, narration.start, narration.end, follow = true)
+        } else webView?.clearNarrationPosition()
     }
 
     DisposableEffect(settings.keepScreenOn) {
@@ -672,18 +541,8 @@ fun ReaderScreen(
 
     fun changeChapter(newIndex: Int, initialProgress: Float = 0f, anchor: ReadingAnchor? = null) {
         if (newIndex !in book.chapters.indices) return
-        tts?.stop()
+        if (narration.bookId == book.id && narration.playing) NarrationPlayer.command(context, "pause")
         webView?.clearNarrationPosition()
-        speaking = false
-        narrationPaused = false
-        narrationChunks = emptyList()
-        narrationChapter = -1
-        narrationChunk = 0
-        narrationOffset = 0
-        narrationEndOffset = 0
-        narrationAutoAdvanceTarget = -1
-        narrationStartWhenPageReady = false
-        lastNarrationBlock = -1
         chapterIndex = newIndex
         chapterAnchor = anchor
         webView?.clearMatches()
@@ -716,172 +575,21 @@ fun ReaderScreen(
     }
     LaunchedEffect(readerTarget?.id) { readerTarget?.let(::navigate) }
 
-    fun enqueueNarration(engine: TextToSpeech, startChunk: Int, startOffset: Int) {
-        if (narrationChunks.isEmpty() || startChunk !in narrationChunks.indices) return
-        engine.stop()
-        var queued = false
-        for (index in startChunk..narrationChunks.lastIndex) {
-            val chunk = narrationChunks[index]
-            val offset = if (index == startChunk) {
-                startOffset.coerceIn(0, chunk.text.length)
-            } else 0
-            val part = chunk.text.substring(offset)
-            if (part.isBlank()) continue
-            val parameters = Bundle().apply {
-                putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, settings.ttsVolume)
-            }
-            val suffix = if (index == narrationChunks.lastIndex) "final" else "part"
-            engine.speak(
-                part,
-                if (!queued) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD,
-                parameters,
-                "luma_${chapterIndex}_${index}_${offset}_$suffix"
-            )
-            queued = true
-            if (index < narrationChunks.lastIndex && chunk.pauseAfterMs > 0) {
-                engine.playSilentUtterance(
-                    chunk.pauseAfterMs.toLong(),
-                    TextToSpeech.QUEUE_ADD,
-                    "luma_pause_${chapterIndex}_$index"
-                )
-            }
-        }
-        if (queued) {
-            narrationPaused = false
-            speaking = true
-        }
-    }
-
-    fun beginNarration(
-        engine: TextToSpeech,
-        selection: SelectionData? = null,
-        startFromProgress: Boolean = true
-    ) {
-        val requestedChapter = chapterIndex
-        val readerView = webView ?: return
-        readerView.captureSpeechBlocks { blocks ->
-            if (requestedChapter != chapterIndex) return@captureSpeechBlocks
-            val chunks = blocks.chunkForSpeech(
-                sentencePauseMs = settings.ttsSentencePauseMs,
-                paragraphPauseMs = settings.ttsParagraphPauseMs
-            )
-            if (chunks.isEmpty()) {
-                if (settings.ttsAutoAdvance && chapterIndex < book.chapters.lastIndex) {
-                    speaking = true
-                    narrationAutoAdvanceTarget = chapterIndex + 1
-                } else {
-                    speaking = false
-                    readerView.clearNarrationPosition()
-                }
-                return@captureSpeechBlocks
-            }
-            narrationChunks = chunks
-            narrationChapter = requestedChapter
-            val startChunk = when {
-                selection != null -> chunks.indexOfFirst { chunk ->
-                    chunk.blockIndex > selection.blockIndex ||
-                        (chunk.blockIndex == selection.blockIndex && chunk.endOffset > selection.startOffset)
-                }.takeIf { it >= 0 } ?: chunks.lastIndex
-                startFromProgress -> (chunks.size * chapterProgress)
-                    .toInt().coerceIn(0, chunks.lastIndex)
-                else -> 0
-            }
-            val startOffset = selection?.let { selected ->
-                val chunk = chunks[startChunk]
-                if (chunk.blockIndex == selected.blockIndex) {
-                    chunk.speechOffsetForDom(selected.startOffset)
-                } else 0
-            } ?: 0
-            narrationChunk = startChunk
-            narrationOffset = startOffset
-            narrationEndOffset = chunks[startChunk].text.length
-            lastNarrationBlock = -1
-            enqueueNarration(engine, startChunk, startOffset)
-        }
-    }
-
     fun startNarration(selection: SelectionData? = null) {
-        val engine = tts
-        if (engine == null || !ttsReady) {
-            pendingNarrationStart = true
-            pendingNarrationSelection = selection
-            ttsInitRequested = true
+        if (android.os.Build.VERSION.SDK_INT >= 33) notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        if (selection == null && narration.bookId == book.id && narration.chapter == chapterIndex) {
+            NarrationPlayer.command(context, if (narration.playing) "pause" else "play")
             return
         }
-        if (speaking && selection == null) {
-            // Mark the pause before stop(): some engines deliver a late
-            // onDone callback and must not move us to the next sentence.
-            narrationPaused = true
-            narrationAutoAdvanceTarget = -1
-            engine.stop()
-            speaking = false
-            return
+        val index = chapterIndex
+        webView?.captureSpeechBlocks { blocks ->
+            if (index != chapterIndex) return@captureSpeechBlocks
+            val chunks = blocks.chunkForSpeech(sentencePauseMs = settings.ttsSentencePauseMs, paragraphPauseMs = settings.ttsParagraphPauseMs)
+            val start = if (selection != null) chunks.indexOfFirst { it.blockIndex > selection.blockIndex || (it.blockIndex == selection.blockIndex && it.endOffset > selection.startOffset) }.coerceAtLeast(0)
+                else (chunks.size * chapterProgress).toInt().coerceIn(0, chunks.lastIndex.coerceAtLeast(0))
+            val offset = selection?.let { selected -> chunks.getOrNull(start)?.takeIf { it.blockIndex == selected.blockIndex }?.speechOffsetForDom(selected.startOffset) } ?: 0
+            NarrationPlayer.start(context, NarrationRequest(book, settings, index, chunks, start, offset))
         }
-        if (selection != null) {
-            engine.stop()
-            narrationPaused = false
-            narrationAutoAdvanceTarget = -1
-        }
-        val selectedVoice = settings.ttsVoiceName?.let { voiceName ->
-            engine.voices?.firstOrNull { it.name == voiceName }
-        }
-        if (selectedVoice != null) engine.voice = selectedVoice
-        else engine.language = if (settings.ttsLanguageTag == "system") Locale.getDefault()
-        else Locale.forLanguageTag(settings.ttsLanguageTag)
-        engine.setSpeechRate(settings.ttsRate)
-        engine.setPitch(settings.ttsPitch)
-
-        if (
-            selection == null && narrationPaused && narrationChapter == chapterIndex &&
-            narrationChunks.isNotEmpty()
-        ) {
-            enqueueNarration(engine, narrationChunk, narrationOffset)
-            return
-        }
-        beginNarration(engine, selection)
-    }
-
-    LaunchedEffect(ttsReady, pendingNarrationStart) {
-        if (ttsReady && pendingNarrationStart) {
-            pendingNarrationStart = false
-            val selection = pendingNarrationSelection
-            pendingNarrationSelection = null
-            startNarration(selection)
-        }
-    }
-
-    LaunchedEffect(narrationAutoAdvanceTarget) {
-        val firstTarget = narrationAutoAdvanceTarget
-        if (firstTarget !in book.chapters.indices) return@LaunchedEffect
-        delay(latestReaderSettings.value.ttsChapterPauseMs.toLong())
-        val engine = tts ?: run {
-            speaking = false
-            narrationAutoAdvanceTarget = -1
-            return@LaunchedEffect
-        }
-        var target = firstTarget
-        var nextText = ""
-        while (target in book.chapters.indices && nextText.isBlank()) {
-            val file = File(book.contentPath, book.chapters[target].href)
-            nextText = runCatching {
-                EpubParser.htmlToText(EpubParser.readDocument(file))
-            }.getOrDefault("")
-            if (nextText.isBlank()) target++
-        }
-        if (target !in book.chapters.indices || nextText.isBlank()) {
-            narrationAutoAdvanceTarget = -1
-            speaking = false
-            narrationPaused = false
-            return@LaunchedEffect
-        }
-        changeChapter(target)
-        narrationChapter = target
-        narrationChunk = 0
-        narrationOffset = 0
-        narrationEndOffset = 0
-        narrationAutoAdvanceTarget = -1
-        narrationStartWhenPageReady = true
-        speaking = true
     }
 
     Scaffold(
@@ -903,22 +611,8 @@ fun ReaderScreen(
                 onWebViewReady = { webView = it },
                 onPageReady = {
                     pendingNavigation?.let { target -> webView?.navigateTo(target); pendingNavigation = null }
-                    val engine = tts
-                    if (narrationStartWhenPageReady && engine != null && ttsReady) {
-                        narrationStartWhenPageReady = false
-                        beginNarration(engine, startFromProgress = false)
-                    } else if (
-                        (speaking || narrationPaused) && narrationChapter == chapterIndex
-                    ) {
-                        narrationChunks.getOrNull(narrationChunk)?.let { chunk ->
-                            webView?.showNarrationPosition(
-                                blockIndex = chunk.blockIndex,
-                                startOffset = chunk.domOffset(narrationOffset),
-                                endOffset = chunk.endOffset,
-                                follow = true
-                            )
-                            lastNarrationBlock = chunk.blockIndex
-                        }
+                    if (narration.bookId == book.id && narration.chapter == chapterIndex) {
+                        webView?.showNarrationPosition(narration.block, narration.start, narration.end, follow = true)
                     }
                 },
                 onLocalLink = { uri -> linkScope.launch {
@@ -965,7 +659,7 @@ fun ReaderScreen(
             if (!controlsVisible) {
                 LinearProgressIndicator(
                     progress = {
-                        ((chapterIndex + chapterProgress) / book.chapters.size).coerceIn(0f, 1f)
+                        book.weightedProgress(chapterIndex, chapterProgress)
                     },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -1120,6 +814,8 @@ fun ReaderScreen(
             }, onDeleteBookmark = onDeleteBookmark,
             onDictionary = { showTools = false; dictionaryWord = "" })
     }
+    if (narration.bookId == book.id && narration.error != null) AlertDialog(onDismissRequest = { NarrationPlayer.command(context, "stop") },
+        text = { Text(narration.error!!) }, confirmButton = { TextButton(onClick = { NarrationPlayer.command(context, "stop") }) { Text("Cerrar") } })
     internalLink?.let { link ->
         AlertDialog(onDismissRequest = { internalLink = null }, title = { Text(link.title) }, text = {
             androidx.compose.foundation.lazy.LazyColumn { item { Text(link.text) } }
@@ -2457,7 +2153,7 @@ private fun injectReaderCss(
     }
 }
 
-private fun List<SpeechBlock>.chunkForSpeech(
+internal fun List<SpeechBlock>.chunkForSpeech(
     maxLength: Int = 460,
     sentencePauseMs: Int = 120,
     paragraphPauseMs: Int = 320
@@ -2564,7 +2260,7 @@ private fun normalizeSpeechRange(
     return NormalizedSpeechRange(text.toString(), offsets.toIntArray())
 }
 
-private fun SpeechChunk.domOffset(speechOffset: Int): Int = when {
+internal fun SpeechChunk.domOffset(speechOffset: Int): Int = when {
     speechOffset <= 0 -> startOffset
     speechOffset >= sourceOffsets.size -> endOffset
     else -> sourceOffsets[speechOffset]

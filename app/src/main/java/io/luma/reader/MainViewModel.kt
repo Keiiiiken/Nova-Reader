@@ -41,7 +41,11 @@ data class BackupUiState(
     val error: String? = null,
     val driveBackups: List<DriveBackup> = emptyList(),
     val accountName: String? = null,
-    val lastResult: String? = null
+    val lastResult: String? = null,
+    val lastSuccess: Long = 0L,
+    val scheduleHours: Long = 0L,
+    val wifiOnly: Boolean = true,
+    val destination: String? = null
 )
 
 data class AppUiState(
@@ -62,9 +66,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(AppUiState())
     val state: StateFlow<AppUiState> = _state.asStateFlow()
 
+    internal val syncPreview = MutableStateFlow<io.luma.reader.drive.SyncPreview?>(null)
+    private var syncToken: String? = null
     private var saveJob: Job? = null
     private val pendingImports = mutableListOf<Uri>()
     init {
+        observeBackupJobs()
+        observeNarration()
         viewModelScope.launch {
             runCatching { withContext(Dispatchers.IO) {
                 val old = repository.load()
@@ -78,8 +86,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     } else book.chapters
                     book.copy(fingerprint = hash, chapters = chapters)
                 })
-                if (upgraded != old) repository.save(upgraded)
-                upgraded
+                val narration = application.getSharedPreferences("nova_narration", android.content.Context.MODE_PRIVATE)
+                val recovered = upgraded.copy(books = upgraded.books.map { book ->
+                    if (book.id == narration.getString("book", null) && narration.getLong("time", 0) > book.lastOpenedAt) {
+                        val chapter = narration.getInt("chapter", 0).coerceIn(book.chapters.indices)
+                        val fraction = narration.getFloat("progress", 0f).coerceIn(0f, 1f)
+                        book.copy(chapterIndex = chapter, chapterProgress = fraction, progress = book.weightedProgress(chapter, fraction),
+                            readingAnchor = ReadingAnchor(narration.getInt("block", 0), narration.getInt("offset", 0)), lastOpenedAt = narration.getLong("time", 0))
+                    } else book
+                })
+                if (recovered != old) repository.save(recovered)
+                recovered
             } }
                 .onSuccess { library ->
                     _state.update { it.copy(library = library, loading = false) }
@@ -91,6 +108,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }.onFailure { error ->
                     _state.update { it.copy(loadingError = "No se pudo cargar la biblioteca. Comprueba el espacio disponible y vuelve a abrir la app.") }
                 }
+        }
+    }
+
+    private fun observeNarration() {
+        viewModelScope.launch {
+            var previous: Triple<String?, Int, Int>? = null
+            io.luma.reader.audio.NarrationPlayer.state.collect { value ->
+                val key = Triple(value.bookId, value.chapter, value.block)
+                if (value.bookId != null && key != previous && !_state.value.loading) {
+                    previous = key
+                    updateReadingPosition(value.bookId, value.chapter, value.progress)
+                    updateAnchor(value.bookId, value.chapter, ReadingAnchor(value.block, value.start))
+                }
+            }
         }
     }
 
@@ -337,15 +368,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearBackupError() { _state.update { it.copy(backup = it.backup.copy(error = null)) } }
     fun backupError(message: String) { _state.update { it.copy(backup = it.backup.copy(error = message)) } }
 
-    fun exportBackup(uri: Uri) = backupOperation("Preparando copia local") {
-        val service = BackupRepository(getApplication())
-        val file = service.create(_state.value.library)
-        try {
-            getApplication<Application>().contentResolver.openOutputStream(uri, "wt")?.use { output ->
-                file.inputStream().use { BackupRepository.copyLimited(it, output, BackupRepository.MAX_BACKUP) }
-            } ?: error("No se pudo guardar la copia")
-        } finally { file.delete() }
-        "Copia local guardada"
+    fun exportBackup(uri: Uri) {
+        if (_state.value.backup.busy || _state.value.importing) return
+        runCatching { getApplication<Application>().contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
+        flushPersistence()
+        io.luma.reader.backup.BackupJobs.enqueue(getApplication(), "local", uri = uri.toString())
     }
 
     fun restoreBackup(uri: Uri) = backupOperation("Restaurando copia local", restoring = true) {
@@ -374,20 +401,58 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         "Notas exportadas"
     }
 
-    fun saveToDrive(token: String) = backupOperation("Preparando copia para Drive") {
-        val file = BackupRepository(getApplication()).create(_state.value.library)
-        try {
-            updateBackupOperation("Guardando en Google Drive")
-            val client = DriveBackupClient(token)
-            client.saveLatest(file, ::backupProgress)
-            // Refreshing the list must not report a completed save as a failed upload.
-            try {
-                val files = client.list()
-                _state.update { it.copy(backup = it.backup.copy(driveBackups = files)) }
-            } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { clearDriveBackups() }
-        } finally { file.delete() }
-        "Copia guardada en Google Drive"
+    fun saveToDrive(token: String) {
+        if (_state.value.backup.busy || _state.value.importing) return
+        val account = _state.value.backup.accountName ?: return backupError("Elige una cuenta de Google")
+        flushPersistence()
+        io.luma.reader.backup.BackupJobs.memoryToken = account to token
+        io.luma.reader.backup.BackupJobs.enqueue(getApplication(), "drive", account = account)
+    }
+    fun scheduleBackup(hours: Long, wifi: Boolean) {
+        runCatching { io.luma.reader.backup.BackupJobs.schedule(getApplication(), hours, wifi) }
+            .onSuccess { _state.update { it.copy(backup = it.backup.copy(scheduleHours = hours, wifiOnly = wifi)) } }
+            .onFailure { backupError(it.message ?: "Guarda primero una copia") }
+    }
+    fun cancelBackup() = io.luma.reader.backup.BackupJobs.cancel(getApplication())
+    private fun observeBackupJobs() {
+        val context = getApplication<Application>()
+        val prefs = io.luma.reader.backup.BackupJobs.preferences(context)
+        _state.update { it.copy(backup = it.backup.copy(accountName = prefs.getString("account", null),
+            lastSuccess = prefs.getLong("lastSuccess", 0), scheduleHours = prefs.getLong("hours", 0),
+            wifiOnly = prefs.getBoolean("wifi", true), destination = prefs.getString("destination", null))) }
+        viewModelScope.launch {
+            androidx.work.WorkManager.getInstance(context).getWorkInfosByTagFlow(io.luma.reader.backup.BackupJobs.TAG).collect { jobs ->
+                val running = jobs.firstOrNull { it.state == androidx.work.WorkInfo.State.RUNNING }
+                val queued = jobs.firstOrNull { it.state == androidx.work.WorkInfo.State.ENQUEUED && it.periodicityInfo == null }
+                val active = running ?: queued
+                if (!_state.value.backup.restoring) _state.update { state -> state.copy(backup = state.backup.copy(
+                    busy = active != null, operation = active?.progress?.getString("label") ?: "Copia en espera",
+                    progress = active?.progress?.getFloat("progress", -1f)?.takeIf { it >= 0 },
+                    lastSuccess = prefs.getLong("lastSuccess", 0), destination = prefs.getString("destination", null),
+                    error = if (active == null) prefs.getString("lastError", null) else null,
+                    lastResult = if (active == null && prefs.getLong("lastSuccess", 0) > state.backup.lastSuccess) "Copia completada" else state.backup.lastResult
+                )) }
+            }
+        }
+    }
+    fun prepareSync(token: String) = backupOperation("Comparando progreso y notas", restoring = true) {
+        val preview = io.luma.reader.drive.LibrarySync.download(getApplication(), token, _state.value.library)
+        syncToken = token
+        syncPreview.value = preview
+        "Revisa los avances antes de sincronizar"
+    }
+    fun cancelSync() { syncPreview.value = null; syncToken = null }
+    fun applySync(remoteIds: Set<String>) {
+        val preview = syncPreview.value ?: return
+        val token = syncToken ?: return
+        backupOperation("Sincronizando progreso y notas", restoring = true) {
+            val merged = io.luma.reader.drive.LibrarySync.applyChoices(_state.value.library, preview, remoteIds)
+            repository.save(merged)
+            _state.update { it.copy(library = merged) }
+            io.luma.reader.drive.LibrarySync.upload(getApplication(), token, merged)
+            cancelSync()
+            "Progreso, marcadores y notas sincronizados"
+        }
     }
     fun listDriveBackups(token: String) = backupOperation("Buscando copias en Google Drive") {
         val files = DriveBackupClient(token).list()
