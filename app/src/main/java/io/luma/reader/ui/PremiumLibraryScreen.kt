@@ -57,6 +57,9 @@ import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.AutoStories
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.runtime.collectAsState
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.FilterChip
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CollectionsBookmark
@@ -192,6 +195,7 @@ fun LibraryScreen(
         snackbarHost = snackbarHost,
         bottomBar = {
             Column {
+                NarrationMiniPlayer(state.library, onOpenBook)
                 if (state.backup.busy) {
                     Surface(color = MaterialTheme.colorScheme.primaryContainer) {
                         Box(Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
@@ -1180,4 +1184,20 @@ private fun adaptiveLibraryColumns(settings: AppSettings): Int {
     val width = config.screenWidthDp
     val base = if (settings.libraryColumns == 2) 185 else 125
     return (width / (base * config.fontScale.coerceAtLeast(1f))).toInt().coerceIn(1, 8)
+}
+
+@Composable
+private fun NarrationMiniPlayer(library: LibrarySnapshot, onOpen: (String) -> Unit) {
+    val player by io.luma.reader.audio.NarrationPlayer.state.collectAsState()
+    val context = LocalContext.current
+    val book = library.books.firstOrNull { it.id == player.bookId } ?: return
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { onOpen(book.id) }, modifier = Modifier.weight(1f)) { Text(book.title, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            IconButton(onClick = { io.luma.reader.audio.NarrationPlayer.command(context, if (player.playing) "pause" else "play") }) {
+                Icon(if (player.playing) Icons.Default.Pause else Icons.Default.PlayArrow, if (player.playing) "Pausar narración" else "Reanudar narración")
+            }
+            IconButton(onClick = { io.luma.reader.audio.NarrationPlayer.command(context, "stop") }) { Icon(Icons.Default.Close, "Detener narración") }
+        }
+    }
 }

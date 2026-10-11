@@ -42,6 +42,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val state by viewModel.state.collectAsStateWithLifecycle()
+            androidx.compose.runtime.LaunchedEffect(state.loading, intent?.getStringExtra("narrationBook")) {
+                if (!state.loading) intent?.getStringExtra("narrationBook")?.let { id -> viewModel.openBook(id); intent.removeExtra("narrationBook") }
+            }
             LumaTheme(state.library.appSettings) {
                 LumaApp(viewModel)
             }

@@ -487,6 +487,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun commitRestored(restored: LibrarySnapshot) {
+        io.luma.reader.audio.NarrationPlayer.command(getApplication(), "stop")
         val current = _state.value.library
         try { repository.save(restored) }
         catch (error: Throwable) {

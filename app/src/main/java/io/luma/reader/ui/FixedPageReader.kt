@@ -5,7 +5,8 @@ import android.graphics.BitmapFactory
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -76,15 +77,15 @@ internal fun FixedPageReader(book: Book, onBack: () -> Unit, onPosition: (Int) -
             }
             // Let the image's native allocation be collected after Compose releases it.
             // Recycling during pager disposal can race a frame still using its texture.
-            var x by remember(page, scale) { mutableFloatStateOf(0f) }; var y by remember(page, scale) { mutableFloatStateOf(0f) }
+            var x by remember(page) { mutableFloatStateOf(0f) }; var y by remember(page) { mutableFloatStateOf(0f) }
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 bitmap?.let { image ->
                     Image(image.asImageBitmap(), "Página ${page + 1}", Modifier.fillMaxSize()
-                        .pointerInput(page) { detectTransformGestures { _, pan, zoom, _ ->
+                        .transformable(state = rememberTransformableState { zoom, pan, _ ->
                             scale = (scale * zoom).coerceIn(1f, 4f)
-                            x = (x + pan.x).coerceIn(-size.width * (scale - 1) / 2, size.width * (scale - 1) / 2)
-                            y = (y + pan.y).coerceIn(-size.height * (scale - 1) / 2, size.height * (scale - 1) / 2)
-                        } }.graphicsLayer { scaleX = scale; scaleY = scale; translationX = x; translationY = y })
+                            x = if (scale == 1f) 0f else (x + pan.x).coerceIn(-1000f, 1000f)
+                            y = if (scale == 1f) 0f else (y + pan.y).coerceIn(-1600f, 1600f)
+                        }, canPan = { scale > 1f }).graphicsLayer { scaleX = scale; scaleY = scale; translationX = x; translationY = y })
                 } ?: if (error == null) CircularProgressIndicator() else Text(error!!)
             }
         }
