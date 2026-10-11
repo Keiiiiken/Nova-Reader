@@ -1,5 +1,7 @@
 package io.luma.reader.ui
 
+import io.luma.reader.model.assetName
+
 import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
@@ -763,13 +765,12 @@ private fun themePreviewColors(theme: ReaderTheme): Pair<Color, Color> = when (t
     ReaderTheme.OLED -> Color.Black to Color(0xFFE7E7E7)
 }
 
-private fun ReaderFont.previewFamily(): FontFamily = when (this) {
-    ReaderFont.SERIF,
-    ReaderFont.GARAMOND,
-    ReaderFont.BASKERVILLE,
-    ReaderFont.PALATINO -> FontFamily.Serif
-    ReaderFont.SANS,
-    ReaderFont.SYSTEM,
-    ReaderFont.DYSLEXIC -> FontFamily.SansSerif
-    ReaderFont.MONO -> FontFamily.Monospace
+@Composable
+private fun ReaderFont.previewFamily(): FontFamily {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val asset = assetName
+    return remember(asset) {
+        if (asset == null) FontFamily.Default
+        else FontFamily(android.graphics.Typeface.createFromAsset(context.assets, "fonts/$asset.ttf"))
+    }
 }

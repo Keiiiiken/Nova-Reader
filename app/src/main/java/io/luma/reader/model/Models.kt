@@ -111,14 +111,14 @@ enum class ReaderTheme(val label: String) {
 }
 
 enum class ReaderFont(val label: String, val css: String) {
-    SERIF("Literaria", "Georgia, 'Times New Roman', serif"),
-    GARAMOND("Clásica", "Garamond, 'EB Garamond', Georgia, serif"),
-    BASKERVILLE("Elegante", "Baskerville, 'Libre Baskerville', Georgia, serif"),
-    PALATINO("Humanista", "Palatino, 'Palatino Linotype', serif"),
-    SANS("Moderna", "Arial, Helvetica, sans-serif"),
+    SERIF("Literaria", "Novaliteraria, serif"),
+    GARAMOND("Clásica", "Novaclasica, serif"),
+    BASKERVILLE("Elegante", "Novaelegante, serif"),
+    PALATINO("Humanista", "Novahumanista, serif"),
+    SANS("Moderna", "Novamoderna, serif"),
     SYSTEM("Sistema", "system-ui, -apple-system, sans-serif"),
-    DYSLEXIC("Legible", "Verdana, Arial, sans-serif"),
-    MONO("Monoespaciada", "'Courier New', monospace")
+    DYSLEXIC("Legible", "Novalegible, serif"),
+    MONO("Monoespaciada", "Novamono, serif")
 }
 
 enum class AppThemeMode(val label: String) {
@@ -206,3 +206,14 @@ data class VocabularyWord(val id: String, val word: String, val definition: Stri
     val quote: String = "", val bookTitle: String = "", val createdAt: Long = System.currentTimeMillis())
 @Immutable
 data class ReadingDay(val date: String, val millis: Long)
+
+val ReaderFont.assetName: String? get() = when (this) {
+    ReaderFont.SERIF -> "literaria"
+    ReaderFont.GARAMOND -> "clasica"
+    ReaderFont.BASKERVILLE -> "elegante"
+    ReaderFont.PALATINO -> "humanista"
+    ReaderFont.SANS -> "moderna"
+    ReaderFont.DYSLEXIC -> "legible"
+    ReaderFont.MONO -> "mono"
+    ReaderFont.SYSTEM -> null
+}

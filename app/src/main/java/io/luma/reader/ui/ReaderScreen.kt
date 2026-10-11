@@ -114,6 +114,7 @@ import io.luma.reader.model.ReadingAnchor
 import io.luma.reader.model.ReaderBookmark
 import io.luma.reader.model.ReaderTarget
 import io.luma.reader.model.Book
+import io.luma.reader.model.assetName
 import io.luma.reader.model.ReaderAnnotation
 import io.luma.reader.model.ReaderFont
 import io.luma.reader.model.ReaderAlignment
@@ -381,6 +382,9 @@ fun ReaderScreen(
     var showContents by remember { mutableStateOf(false) }
     var showAnnotations by remember { mutableStateOf(false) }
     var showTools by remember { mutableStateOf(false) }
+    var internalLink by remember { mutableStateOf<io.luma.reader.reader.InternalLink?>(null) }
+    var linkError by remember { mutableStateOf<String?>(null) }
+    val linkScope = rememberCoroutineScope()
     var dictionaryWord by remember { mutableStateOf<String?>(null) }
     var chapterAnchor by remember(book.id) { mutableStateOf(book.readingAnchor) }
     var pendingNavigation by remember(book.id) { mutableStateOf<ReaderTarget?>(null) }
@@ -917,6 +921,10 @@ fun ReaderScreen(
                         }
                     }
                 },
+                onLocalLink = { uri -> linkScope.launch {
+                    try { internalLink = withContext(Dispatchers.IO) { io.luma.reader.reader.InternalLinks.resolve(book, uri) } }
+                    catch (_: Exception) { linkError = "No se encontró esa referencia dentro del libro" }
+                } },
                 onSelectionChanged = { pendingSelection = it },
                 onTap = { controlsVisible = !controlsVisible },
                 onProgress = { progress ->
@@ -1112,6 +1120,16 @@ fun ReaderScreen(
             }, onDeleteBookmark = onDeleteBookmark,
             onDictionary = { showTools = false; dictionaryWord = "" })
     }
+    internalLink?.let { link ->
+        AlertDialog(onDismissRequest = { internalLink = null }, title = { Text(link.title) }, text = {
+            androidx.compose.foundation.lazy.LazyColumn { item { Text(link.text) } }
+        }, confirmButton = { TextButton(onClick = { internalLink = null }) { Text("Volver a la lectura") } },
+            dismissButton = { if (link.chapterIndex >= 0) TextButton(onClick = {
+                pendingNavigation = ReaderTarget(link.chapterIndex, anchor = ReadingAnchor(-1, 0, link.anchorText))
+                changeChapter(link.chapterIndex, 0f, ReadingAnchor(-1, 0, link.anchorText)); internalLink = null
+            }) { Text("Ir al fragmento") } })
+    }
+    linkError?.let { message -> AlertDialog(onDismissRequest = { linkError = null }, text = { Text(message) }, confirmButton = { TextButton(onClick = { linkError = null }) { Text("Cerrar") } }) }
     dictionaryWord?.let { DictionarySheet(it, onDismiss = { dictionaryWord = null }, quote = pendingSelection?.text.orEmpty(), bookTitle = book.title, onSave = onSaveVocabulary) }
 
     if (showContents) {
@@ -1350,6 +1368,7 @@ private fun EpubWebView(
     onWebViewReady: (ReaderWebView) -> Unit,
     onPageReady: () -> Unit,
     onSelectionChanged: (SelectionData?) -> Unit,
+    onLocalLink: (android.net.Uri) -> Unit,
     onTap: () -> Unit,
     onProgress: (Float) -> Unit,
     onPreviousChapter: () -> Unit,
@@ -1358,6 +1377,7 @@ private fun EpubWebView(
     modifier: Modifier = Modifier
 ) {
     val colors = readingColors(settings.theme)
+    val latestLink = rememberUpdatedState(onLocalLink)
     val latestTap = rememberUpdatedState(onTap)
     val latestProgress = rememberUpdatedState(onProgress)
     val latestPreviousChapter = rememberUpdatedState(onPreviousChapter)
@@ -1432,7 +1452,10 @@ private fun EpubWebView(
                     override fun shouldOverrideUrlLoading(
                         view: WebView?,
                         request: WebResourceRequest?
-                    ): Boolean = true
+                    ): Boolean {
+                        request?.url?.takeIf { it.scheme == "file" }?.let { latestLink.value(it) }
+                        return true
+                    }
 
                     override fun onPageFinished(view: WebView, url: String?) {
                         (view as? ReaderWebView)?.apply {
@@ -2090,6 +2113,7 @@ private fun readerStyle(settings: ReaderSettings, colors: ReadingColors): String
     return """
         <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.75, maximum-scale=5.0, user-scalable=yes" />
         <style id="luma-reader-style">
+          ${settings.font.assetName?.let { "@font-face { font-family: Nova$it; src: url('file:///android_asset/fonts/$it.ttf'); font-weight: 100 900; font-display: swap; }" }.orEmpty()}
           :root { color-scheme: ${if (darkColorScheme) "dark" else "light"}; }
           html, body {
             background: ${colors.cssBackground} !important;
@@ -2614,13 +2638,12 @@ private fun Color.toArgbCompat(): Int = AndroidColor.argb(
     (blue * 255).roundToInt()
 )
 
-private fun ReaderFont.previewFamily(): FontFamily = when (this) {
-    ReaderFont.SERIF,
-    ReaderFont.GARAMOND,
-    ReaderFont.BASKERVILLE,
-    ReaderFont.PALATINO -> FontFamily.Serif
-    ReaderFont.SANS,
-    ReaderFont.SYSTEM,
-    ReaderFont.DYSLEXIC -> FontFamily.SansSerif
-    ReaderFont.MONO -> FontFamily.Monospace
+@Composable
+private fun ReaderFont.previewFamily(): FontFamily {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val asset = assetName
+    return remember(asset) {
+        if (asset == null) FontFamily.Default
+        else FontFamily(android.graphics.Typeface.createFromAsset(context.assets, "fonts/$asset.ttf"))
+    }
 }
