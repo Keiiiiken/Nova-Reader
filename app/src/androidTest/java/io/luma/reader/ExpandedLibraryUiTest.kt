@@ -85,7 +85,13 @@ class ExpandedLibraryUiTest {
             compose.onNodeWithContentDescription("Organizar biblioteca").performClick()
             compose.waitUntilAtLeastOneExists(hasTestTag("select_organize"), 15000)
             compose.onNodeWithTag("select_organize").performClick()
-            compose.waitUntil(10000) { runCatching { compose.onNodeWithText("Acciones").assertIsDisplayed(); true }.getOrDefault(false) }
+            try {
+                compose.waitUntil(10000) { runCatching { compose.onNodeWithText("Acciones").assertIsDisplayed(); true }.getOrDefault(false) }
+            } catch (error: Throwable) {
+                screenshot("fallo-horizontal-letra-grande")
+                File(context.getExternalFilesDir(null), "screenshots/fallo-horizontal-layout.txt").writeText(compose.onRoot(useUnmergedTree = true).printToString())
+                throw error
+            }
             screenshot("organizar-horizontal-letra-grande")
             compose.onNodeWithText("Acciones").assertIsDisplayed()
         } finally {
