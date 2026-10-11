@@ -6,7 +6,8 @@ import androidx.compose.runtime.Immutable
 data class Chapter(
     val title: String,
     val href: String,
-    val mediaType: String = "application/xhtml+xml"
+    val mediaType: String = "application/xhtml+xml",
+    val wordCount: Int = 0
 )
 
 @Immutable
@@ -32,7 +33,17 @@ data class Book(
     val annotations: List<ReaderAnnotation> = emptyList(),
     val readingTimeMillis: Long = 0L,
     val readingAnchor: ReadingAnchor? = null,
-    val bookmarks: List<ReaderBookmark> = emptyList()
+    val bookmarks: List<ReaderBookmark> = emptyList(),
+    val format: BookFormat = BookFormat.EPUB,
+    val fingerprint: String = "",
+    val status: ReadingStatus? = null,
+    val series: String = "",
+    val volume: String = "",
+    val tags: List<String> = emptyList(),
+    val deletedAt: Long = 0L,
+    val modifiedAt: Long = 0L,
+    val annotationTombstones: Set<String> = emptySet(),
+    val bookmarkTombstones: Set<String> = emptySet()
 )
 
 @Immutable
@@ -123,7 +134,9 @@ data class AppSettings(
     val themeMode: AppThemeMode = AppThemeMode.SYSTEM,
     val accent: AppAccent = AppAccent.BLUE,
     val libraryColumns: Int = 3,
-    val includeShelvedBooks: Boolean = true
+    val includeShelvedBooks: Boolean = true,
+    val dailyGoalMinutes: Int = 0,
+    val adaptiveColumns: Boolean = true
 )
 
 enum class ReaderAlignment(val label: String, val css: String) {
@@ -167,5 +180,29 @@ data class LibrarySnapshot(
     val settings: ReaderSettings = ReaderSettings(),
     val appSettings: AppSettings = AppSettings(),
     val sort: LibrarySort = LibrarySort.RECENT,
-    val gridView: Boolean = true
+    val gridView: Boolean = true,
+    val vocabulary: List<VocabularyWord> = emptyList(),
+    val readingDays: List<ReadingDay> = emptyList()
 )
+
+
+enum class BookFormat { EPUB, PDF, CBZ }
+enum class ReadingStatus(val label: String) {
+    PENDING("Pendiente"), READING("Leyendo"), FINISHED("Terminado"), ABANDONED("Abandonado")
+}
+val Book.effectiveStatus: ReadingStatus get() = status ?: when {
+    progress >= .995f -> ReadingStatus.FINISHED
+    progress > .001f -> ReadingStatus.READING
+    else -> ReadingStatus.PENDING
+}
+fun Book.weightedProgress(chapter: Int, fraction: Float): Float {
+    if (chapters.isEmpty()) return 0f
+    val index = chapter.coerceIn(chapters.indices)
+    val weights = chapters.map { it.wordCount.coerceAtLeast(1).toLong() }
+    return ((weights.take(index).sum() + weights[index] * fraction.coerceIn(0f, 1f)) / weights.sum()).toFloat().coerceIn(0f, 1f)
+}
+@Immutable
+data class VocabularyWord(val id: String, val word: String, val definition: String,
+    val quote: String = "", val bookTitle: String = "", val createdAt: Long = System.currentTimeMillis())
+@Immutable
+data class ReadingDay(val date: String, val millis: Long)

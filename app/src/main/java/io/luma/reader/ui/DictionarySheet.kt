@@ -19,9 +19,11 @@ import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun DictionarySheet(initialWord: String, onDismiss: () -> Unit) {
+internal fun DictionarySheet(initialWord: String, onDismiss: () -> Unit,
+    quote: String = "", bookTitle: String = "", onSave: (io.luma.reader.model.VocabularyWord) -> Unit = {}) {
     val context = LocalContext.current
     val dictionary = remember(context) { OfflineDictionary(context.applicationContext) }
+    var savedWord by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf(initialWord.trim().take(80)) }
     var entries by remember { mutableStateOf(emptyList<DictionaryEntry>()) }
     var suggestions by remember { mutableStateOf(emptyList<String>()) }
@@ -63,6 +65,10 @@ internal fun DictionarySheet(initialWord: String, onDismiss: () -> Unit) {
                     Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
                     Column(modifier = Modifier.fillMaxWidth().padding(18.dp).testTag("dictionary_entry_${entry.word}"), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(entry.word, style = MaterialTheme.typography.titleLarge)
+                        TextButton(enabled = savedWord != entry.word, onClick = {
+                            onSave(io.luma.reader.model.VocabularyWord(java.util.UUID.randomUUID().toString(), entry.word,
+                                entry.definitions.joinToString("\n") { it.definition }, quote, bookTitle)); savedWord = entry.word
+                        }) { Text(if (savedWord == entry.word) "Palabra guardada" else "Guardar en mi vocabulario") }
                         entry.definitions.forEachIndexed { index, sense ->
                             Text("${index + 1}. ${sense.definition}")
                         }

@@ -113,7 +113,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.luma.reader.AppUiState
-import io.luma.reader.model.Book
+import io.luma.reader.model.*
 import io.luma.reader.model.BookCollection
 import io.luma.reader.model.LibrarySort
 import io.luma.reader.model.ReaderSettings
@@ -159,7 +159,9 @@ fun LibraryScreen(
     onGeneralSettingsChanged: (ReaderSettings) -> Unit,
     onAppSettingsChanged: (io.luma.reader.model.AppSettings) -> Unit,
     onOpenBackup: () -> Unit,
-    onOpenAnnotation: (String, io.luma.reader.model.ReaderAnnotation) -> Unit
+    onOpenAnnotation: (String, io.luma.reader.model.ReaderAnnotation) -> Unit,
+    onManage: (Int) -> Unit = {},
+    onSaveVocabulary: (VocabularyWord) -> Unit = {}
 ) {
     val focusManager = LocalFocusManager.current
     var section by rememberSaveable { mutableStateOf(HomeSection.LIBRARY) }
@@ -176,7 +178,7 @@ fun LibraryScreen(
         ActivityResultContracts.OpenMultipleDocuments()
     ) { onImport(it) }
     val launchImport = {
-        importLauncher.launch(arrayOf("application/epub+zip", "application/octet-stream"))
+        importLauncher.launch(arrayOf("application/epub+zip", "application/pdf", "application/vnd.comicbook+zip", "application/zip", "application/octet-stream"))
     }
 
     // The shelf detail is an in-library destination, so the system back gesture
@@ -228,7 +230,8 @@ fun LibraryScreen(
                     onSettings = { showGeneralSettings = true },
                     onImport = launchImport,
                     onOpenBook = onOpenBook,
-                    onBookOptions = { selectedBook = it }
+                    onBookOptions = { selectedBook = it },
+                    onManage = { onManage(0) }
                 )
                 HomeSection.COLLECTIONS -> CollectionsDashboard(
                     state = state,
@@ -295,6 +298,7 @@ fun LibraryScreen(
             onSettingsChanged = onAppSettingsChanged,
             onOpenBackup = { showGeneralSettings = false; onOpenBackup() },
             onOpenDictionary = { showGeneralSettings = false; showDictionary = true },
+            onManage = { showGeneralSettings = false; onManage(it) },
             onDismiss = { showGeneralSettings = false },
             onOpenReadingSettings = {
                 showGeneralSettings = false
@@ -303,7 +307,7 @@ fun LibraryScreen(
         )
     }
 
-    if (showDictionary) DictionarySheet("", onDismiss = { showDictionary = false })
+    if (showDictionary) DictionarySheet("", onDismiss = { showDictionary = false }, onSave = onSaveVocabulary)
 
     if (showReadingSettings) {
         ReaderSettingsSheet(
@@ -353,17 +357,19 @@ private fun LibraryDashboard(
     onSort: (LibrarySort) -> Unit,
     onAppSettingsChanged: (io.luma.reader.model.AppSettings) -> Unit,
     onSettings: () -> Unit, onImport: () -> Unit,
-    onOpenBook: (String) -> Unit, onBookOptions: (Book) -> Unit
+    onOpenBook: (String) -> Unit, onBookOptions: (Book) -> Unit, onManage: () -> Unit = {}
 ) {
     val visibleLibraryBooks = remember(state.library.books, state.library.appSettings.includeShelvedBooks) { state.library.books.filter {
         state.library.appSettings.includeShelvedBooks || it.collectionId == null
     } }
     val books = remember(visibleLibraryBooks, query, filter, state.library.sort) { visibleLibraryBooks.asSequence()
-        .filter { query.isBlank() || it.title.contains(query, true) || it.author.contains(query, true) }
+        .filter { query.isBlank() || listOf(it.title, it.author, it.series, it.tags.joinToString()).any { value -> value.contains(query, true) } }
         .filter { when (filter) {
-            FILTER_READING -> it.progress in .001f..0.995f
-            FILTER_PENDING -> it.progress < .001f
+            FILTER_READING -> it.effectiveStatus == ReadingStatus.READING
+            FILTER_PENDING -> it.effectiveStatus == ReadingStatus.PENDING
             FILTER_FAVORITES -> it.favorite
+            "finished" -> it.effectiveStatus == ReadingStatus.FINISHED
+            "abandoned" -> it.effectiveStatus == ReadingStatus.ABANDONED
             else -> true
         } }
         .let { sequence -> when (state.library.sort) {
@@ -372,20 +378,22 @@ private fun LibraryDashboard(
             LibrarySort.AUTHOR -> sequence.sortedBy { it.author.lowercase() }
             LibrarySort.PROGRESS -> sequence.sortedByDescending { it.progress }
         } }.toList() }
-    val continueBook = remember(visibleLibraryBooks) { visibleLibraryBooks.filter { it.progress in .001f..0.995f }.maxByOrNull { it.lastOpenedAt } }
-    val columns = state.library.appSettings.libraryColumns.coerceIn(2, 3)
+    val continueBook = remember(visibleLibraryBooks) { visibleLibraryBooks.filter { it.effectiveStatus == ReadingStatus.READING }.maxByOrNull { it.lastOpenedAt } }
+    val columns = adaptiveLibraryColumns(state.library.appSettings)
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            LibraryHeader(query, onQuery, onSettings, onImport)
+            LibraryHeader(query, onQuery, onSettings, onImport, onManage)
             Column {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item { FilterPill("Todos", filter == FILTER_ALL) { onFilter(FILTER_ALL) } }
                     item { FilterPill("Lectura", filter == FILTER_READING) { onFilter(FILTER_READING) } }
                     item { FilterPill("Pendientes", filter == FILTER_PENDING) { onFilter(FILTER_PENDING) } }
                     item { FilterPill("Favoritos", filter == FILTER_FAVORITES) { onFilter(FILTER_FAVORITES) } }
+                    item { FilterPill("Terminados", filter == "finished") { onFilter("finished") } }
+                    item { FilterPill("Abandonados", filter == "abandoned") { onFilter("abandoned") } }
                 }
             }
         }
@@ -445,7 +453,8 @@ private fun LibraryHeader(
     query: String,
     onQuery: (String) -> Unit,
     onSettings: () -> Unit,
-    onImport: () -> Unit
+    onImport: () -> Unit,
+    onManage: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -463,6 +472,7 @@ private fun LibraryHeader(
                 fontWeight = FontWeight.SemiBold)
             Text("Biblioteca", style = MaterialTheme.typography.headlineMedium)
         }
+        IconButton(onClick = onManage) { Icon(Icons.Default.Checklist, "Organizar biblioteca") }
         Button(onClick = onImport, shape = RoundedCornerShape(16.dp), contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp)) {
             Icon(Icons.Default.Add, null, Modifier.size(20.dp))
             Spacer(Modifier.width(4.dp))
@@ -497,7 +507,7 @@ private fun EditorialEmptyState(onImport: () -> Unit) {
         Text("Tu biblioteca empieza aquí", style = MaterialTheme.typography.titleLarge,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Spacer(Modifier.height(8.dp))
-        Text("Importa un EPUB para empezar a leer.\nTus libros y notas se guardan en este dispositivo.",
+        Text("Importa un EPUB, PDF o CBZ para empezar a leer.\nTus libros y notas se guardan en este dispositivo.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         Spacer(Modifier.height(24.dp))
@@ -711,7 +721,7 @@ private fun ShelfDetail(
 ) {
     val collection = state.library.collections.firstOrNull { it.id == shelfId }
     val books = state.library.books.filter { it.collectionId == shelfId }
-    val columns = state.library.appSettings.libraryColumns.coerceIn(2, 3)
+    val columns = adaptiveLibraryColumns(state.library.appSettings)
     LazyVerticalGrid(
         columns = GridCells.Fixed(columns),
         contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 12.dp, bottom = 28.dp),
@@ -815,11 +825,26 @@ private fun CollectionCard(collection: BookCollection, books: List<Book>, onOpen
 
 @Composable
 private fun NotesDashboard(state: AppUiState, onOpenAnnotation: (String, io.luma.reader.model.ReaderAnnotation) -> Unit) {
-    val entries = state.library.books.flatMap { book -> book.annotations.map { book to it } }
+    var query by rememberSaveable { mutableStateOf("") }
+    var bookFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    var colorFilter by rememberSaveable { mutableStateOf<Int?>(null) }
+    val entries = state.library.books.filter { bookFilter == null || it.id == bookFilter }.flatMap { book -> book.annotations.map { book to it } }
+        .filter { (_, note) -> (colorFilter == null || note.colorIndex == colorFilter) && "${note.selectedText} ${note.note}".contains(query, true) }
         .sortedByDescending { it.second.createdAt }
     LazyColumn(contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         item { PageHeader("NOVA READER", "Notas", "Tus subrayados y comentarios, en un solo lugar.") }
+        item { OutlinedTextField(query, { query = it }, label = { Text("Buscar en notas") }, modifier = Modifier.fillMaxWidth().testTag("notes_search"), singleLine = true) }
+        item { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { FilterChip(selected = bookFilter == null, onClick = { bookFilter = null }, label = { Text("Todos los libros") }) }
+            items(state.library.books.filter { it.annotations.isNotEmpty() }) { book -> FilterChip(selected = bookFilter == book.id, onClick = { bookFilter = book.id }, label = { Text(book.title) }) }
+        } }
+        item { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item { FilterChip(selected = colorFilter == null, onClick = { colorFilter = null }, label = { Text("Todos los colores") }) }
+            items(listOf(0 to "Amarillo", 1 to "Verde", 2 to "Azul", 3 to "Rosa")) { (index, title) ->
+                FilterChip(selected = colorFilter == index, onClick = { colorFilter = index }, label = { Text(title) })
+            }
+        } }
         if (entries.isEmpty()) item {
             Column(Modifier.fillMaxWidth().padding(vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Default.Notes, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
@@ -944,8 +969,8 @@ private fun BookActionSheet(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("¿Eliminar este libro?") },
-            text = { Text("Se borrará la copia privada y el progreso guardado en Nova Reader.") },
+            title = { Text("¿Enviar a la papelera?") },
+            text = { Text("Se conservarán el libro, las notas y el progreso en la papelera durante 30 días.") },
             confirmButton = { TextButton(onClick = onDelete) { Text("Eliminar", color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancelar") } }
         )
@@ -1144,4 +1169,13 @@ private fun formatReadingTime(milliseconds: Long): String {
         minutes < 60L -> "$minutes min"
         else -> "${minutes / 60L} h ${minutes % 60L} min"
     }
+}
+
+@Composable
+private fun adaptiveLibraryColumns(settings: AppSettings): Int {
+    val config = androidx.compose.ui.platform.LocalConfiguration.current
+    if (!settings.adaptiveColumns) return settings.libraryColumns
+    val width = config.screenWidthDp
+    val base = if (settings.libraryColumns == 2) 185 else 125
+    return (width / (base * config.fontScale.coerceAtLeast(1f))).toInt().coerceIn(1, 8)
 }

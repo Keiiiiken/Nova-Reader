@@ -16,7 +16,9 @@ import io.luma.reader.model.ReaderTarget
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import io.luma.reader.epub.EpubParser
-import io.luma.reader.model.Book
+import io.luma.reader.model.*
+import io.luma.reader.importer.BookImporter
+import io.luma.reader.importer.DuplicateBookException
 import io.luma.reader.model.AppSettings
 import io.luma.reader.model.LibrarySnapshot
 import io.luma.reader.model.LibrarySort
@@ -61,12 +63,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val state: StateFlow<AppUiState> = _state.asStateFlow()
 
     private var saveJob: Job? = null
+    private val pendingImports = mutableListOf<Uri>()
     init {
         viewModelScope.launch {
-            runCatching { withContext(Dispatchers.IO) { repository.load() } }
+            runCatching { withContext(Dispatchers.IO) {
+                val old = repository.load()
+                val upgraded = old.copy(books = old.books.map { book ->
+                    val hash = book.fingerprint.ifBlank { BookImporter.fingerprint(File(book.epubPath)) }
+                    val chapters = if (book.format == BookFormat.EPUB && book.chapters.all { it.wordCount == 0 }) book.chapters.map { ch ->
+                        val file = File(book.contentPath, ch.href)
+                        val words = if (file.isFile && file.length() <= 4L * 1024 * 1024)
+                            EpubParser.htmlToText(EpubParser.readDocument(file)).split(Regex("\\s+")).count { it.isNotBlank() } else 0
+                        ch.copy(wordCount = words)
+                    } else book.chapters
+                    book.copy(fingerprint = hash, chapters = chapters)
+                })
+                if (upgraded != old) repository.save(upgraded)
+                upgraded
+            } }
                 .onSuccess { library ->
                     _state.update { it.copy(library = library, loading = false) }
                     refreshMissingCovers()
+                    purgeExpiredTrash()
+                    if (pendingImports.isNotEmpty()) {
+                        val uris = pendingImports.toList(); pendingImports.clear(); importBooks(uris)
+                    }
                 }.onFailure { error ->
                     _state.update { it.copy(loadingError = "No se pudo cargar la biblioteca. Comprueba el espacio disponible y vuelve a abrir la app.") }
                 }
@@ -91,16 +112,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
 
     fun importBooks(uris: List<Uri>) {
-        if (uris.isEmpty() || _state.value.importing || _state.value.backup.busy || _state.value.loading) return
+        if (_state.value.loading) { pendingImports.addAll(uris); return }
+        if (uris.isEmpty() || _state.value.importing || _state.value.backup.busy) return
         viewModelScope.launch {
             _state.update { it.copy(importing = true, importCount = uris.size, message = null) }
             val imported = mutableListOf<Book>()
             val failures = mutableListOf<String>()
+            var duplicates = 0
+            val hashes = _state.value.library.books.map { it.fingerprint }.filter { it.isNotBlank() }.toMutableSet()
             withContext(Dispatchers.IO) {
                 uris.forEach { uri ->
-                    runCatching { parser.import(uri) }
-                        .onSuccess(imported::add)
-                        .onFailure { failures += (it.message ?: "Archivo EPUB no compatible") }
+                    runCatching { BookImporter(getApplication()).import(uri, hashes) }
+                        .onSuccess { imported += it; hashes += it.fingerprint }
+                        .onFailure { if (it is DuplicateBookException) duplicates++ else failures += (it.message ?: "Archivo no compatible") }
                 }
             }
             mutateLibrary { current ->
@@ -111,7 +135,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 imported.isEmpty() -> "No se pudo importar: ${failures.first()}"
                 else -> "${imported.size} importados; ${failures.size} no compatibles"
             }
-            _state.update { it.copy(importing = false, importCount = 0, message = message) }
+            _state.update { it.copy(importing = false, importCount = 0, message = message + if (duplicates > 0) "; $duplicates duplicados omitidos (revisa también la papelera)" else "") }
         }
     }
 
@@ -140,7 +164,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         it.copy(bookmarks = it.bookmarks + bookmark)
     }
     fun deleteBookmark(bookId: String, id: String) = mutateBook(bookId) {
-        it.copy(bookmarks = it.bookmarks.filterNot { bookmark -> bookmark.id == id })
+        it.copy(bookmarks = it.bookmarks.filterNot { bookmark -> bookmark.id == id }, bookmarkTombstones = it.bookmarkTombstones + id)
     }
 
 
@@ -148,7 +172,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val book = _state.value.library.books.firstOrNull { it.id == bookId } ?: return
         val safeChapter = chapter.coerceIn(0, book.chapters.lastIndex)
         val safeChapterProgress = chapterProgress.coerceIn(0f, 1f)
-        val overall = ((safeChapter + safeChapterProgress) / book.chapters.size).coerceIn(0f, 1f)
+        val overall = book.weightedProgress(safeChapter, safeChapterProgress)
         mutateBook(bookId, deferred = true) {
             it.copy(
                 readingAnchor = if (it.chapterIndex == safeChapter) it.readingAnchor else null,
@@ -190,10 +214,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         val book = _state.value.library.books.firstOrNull { it.id == bookId } ?: return
-        viewModelScope.launch(Dispatchers.IO) { repository.deleteBook(book) }
-        mutateLibrary { it.copy(books = it.books.filterNot { item -> item.id == bookId }) }
+        mutateBook(bookId) { it.copy(deletedAt = System.currentTimeMillis()) }
+        _state.update { it.copy(message = "Libro enviado a la papelera durante 30 días") }
         if (_state.value.activeBookId == bookId) closeBook()
     }
+
+    fun setBookStatus(ids: Set<String>, status: ReadingStatus) = editBooks(ids) { it.copy(status = status) }
+    fun favoriteBooks(ids: Set<String>, favorite: Boolean) = editBooks(ids) { it.copy(favorite = favorite) }
+    fun moveBooks(ids: Set<String>, shelf: String?) = editBooks(ids) { it.copy(collectionId = shelf) }
+    fun trashBooks(ids: Set<String>) { if (!_state.value.backup.busy) editBooks(ids) { it.copy(deletedAt = System.currentTimeMillis()) } }
+    fun restoreBooks(ids: Set<String>) = editBooks(ids) { it.copy(deletedAt = 0L) }
+    private fun editBooks(ids: Set<String>, edit: (Book) -> Book) = mutateLibrary { library ->
+        library.copy(books = library.books.map { if (it.id in ids) edit(it).copy(modifiedAt = System.currentTimeMillis()) else it })
+    }
+    fun renameCollection(id: String, name: String, color: Int) {
+        if (name.isBlank()) return
+        mutateLibrary { it.copy(collections = it.collections.map { shelf -> if (shelf.id == id) shelf.copy(name = name.trim(), colorIndex = color.coerceIn(0, 5)) else shelf }) }
+    }
+    fun updateMetadata(id: String, title: String, author: String, series: String, volume: String, tags: List<String>) {
+        if (title.isBlank()) return
+        mutateBook(id) { it.copy(title = title.trim(), author = author.trim(), series = series.trim(), volume = volume.trim(), tags = tags.map(String::trim).filter(String::isNotBlank).distinct()) }
+    }
+    fun deletePermanently(ids: Set<String>) {
+        if (_state.value.backup.busy) return
+        val removed = _state.value.library.books.filter { it.id in ids && it.deletedAt > 0 }
+        mutateLibrary { it.copy(books = it.books - removed.toSet()) }
+        LibraryWrites.enqueue { removed.forEach(repository::deleteBook) }
+    }
+    private fun purgeExpiredTrash() {
+        val cutoff = System.currentTimeMillis() - java.util.concurrent.TimeUnit.DAYS.toMillis(30)
+        deletePermanently(_state.value.library.books.filter { it.deletedAt in 1..cutoff }.map { it.id }.toSet())
+    }
+    fun saveVocabulary(word: VocabularyWord) = mutateLibrary {
+        it.copy(vocabulary = it.vocabulary.filterNot { old -> old.word.equals(word.word, true) && old.quote == word.quote } + word)
+    }
+    fun deleteVocabulary(id: String) = mutateLibrary { it.copy(vocabulary = it.vocabulary.filterNot { word -> word.id == id }) }
 
     fun updateBookCover(bookId: String, uri: Uri) {
         if (_state.value.backup.busy) {
@@ -236,13 +291,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteAnnotation(bookId: String, annotationId: String) =
         mutateBook(bookId) { book ->
-            book.copy(annotations = book.annotations.filterNot { it.id == annotationId })
+            book.copy(annotations = book.annotations.filterNot { it.id == annotationId }, annotationTombstones = book.annotationTombstones + annotationId)
         }
 
     fun addReadingTime(bookId: String, elapsedMillis: Long) {
         if (elapsedMillis < 1_000L) return
-        mutateBook(bookId) { book ->
-            book.copy(readingTimeMillis = (book.readingTimeMillis + elapsedMillis).coerceAtLeast(0L))
+        val now = java.time.ZonedDateTime.now()
+        val today = now.toLocalDate().toString()
+        val sinceMidnight = java.time.Duration.between(now.toLocalDate().atStartOfDay(now.zone), now).toMillis()
+        val todayMillis = minOf(elapsedMillis, sinceMidnight)
+        val yesterday = now.toLocalDate().minusDays(1).toString()
+        mutateLibrary { library ->
+            val days = library.readingDays.associate { it.date to it.millis }.toMutableMap()
+            days[today] = (days[today] ?: 0L) + todayMillis
+            if (elapsedMillis > todayMillis) days[yesterday] = (days[yesterday] ?: 0L) + elapsedMillis - todayMillis
+            library.copy(books = library.books.map { if (it.id == bookId) it.copy(readingTimeMillis = it.readingTimeMillis + elapsedMillis) else it },
+                readingDays = days.toSortedMap().map { ReadingDay(it.key, it.value) })
         }
     }
 
@@ -394,7 +458,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun mutateBook(bookId: String, deferred: Boolean = false, transform: (Book) -> Book) {
         mutateLibrary(deferred) { library ->
-            library.copy(books = library.books.map { if (it.id == bookId) transform(it) else it })
+            library.copy(books = library.books.map { if (it.id == bookId) transform(it).copy(modifiedAt = System.currentTimeMillis()) else it })
         }
     }
 

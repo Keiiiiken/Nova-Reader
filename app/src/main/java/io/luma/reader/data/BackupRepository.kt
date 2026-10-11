@@ -82,10 +82,11 @@ internal class BackupRepository(private val context: Context) {
                     val temp = File(context.cacheDir, "restore-book-${UUID.randomUUID()}.epub")
                     val imported = try {
                         zip.getInputStream(epubEntry).use { input -> temp.outputStream().use { copyLimited(input, it, MAX_EPUB) } }
-                        EpubParser(context, extractionLimit = minOf(remainingExtraction, 750L * 1024 * 1024)).import(Uri.fromFile(temp))
+                        io.luma.reader.importer.BookImporter(context).import(Uri.fromFile(temp), forcedFormat = original.format)
                     } finally { temp.delete() }
                     staged += imported
                     remainingExtraction -= File(imported.contentPath).walkTopDown().filter { it.isFile }.sumOf { it.length() }
+                    require(remainingExtraction >= 0) { "La copia descomprimida supera 2 GiB" }
                     val cover = zip.getEntry("books/${original.id}/cover.image")?.let { coverEntry ->
                         val output = File(File(imported.epubPath).parentFile, "backup-cover.image")
                         zip.getInputStream(coverEntry).use { input -> output.outputStream().use { copyLimited(input, it, MAX_COVER) } }

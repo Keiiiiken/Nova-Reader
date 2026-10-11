@@ -4,7 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
-import io.luma.reader.model.Book
+import io.luma.reader.model.*
 import io.luma.reader.model.BookCollection
 import io.luma.reader.model.Chapter
 import io.luma.reader.model.AppAccent
@@ -77,7 +77,12 @@ class LibraryRepository(context: Context) {
             snapshot.books.forEachIndexed { index, book ->
                 if (oldBooks[book.id] != book || previous?.books?.getOrNull(index)?.id != book.id) {
                     db.insertWithOnConflict("books", null, ContentValues().apply {
-                        put("id", book.id); put("payload", encodeBook(book).toString()); put("ordinal", index)
+                        put("id", book.id)
+        put("format", book.format.name); put("fingerprint", book.fingerprint)
+        put("status", book.status?.name); put("series", book.series); put("volume", book.volume)
+        put("tags", JSONArray(book.tags)); put("deletedAt", book.deletedAt); put("modifiedAt", book.modifiedAt)
+        put("annotationTombstones", JSONArray(book.annotationTombstones.toList()))
+        put("bookmarkTombstones", JSONArray(book.bookmarkTombstones.toList())); put("payload", encodeBook(book).toString()); put("ordinal", index)
                     }, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE).also { check(it != -1L) }
                 }
             }
@@ -148,10 +153,19 @@ class LibraryRepository(context: Context) {
         put("appSettings", encodeAppSettings(state.appSettings))
         put("sort", state.sort.name)
         put("grid", state.gridView)
+        put("vocabulary", JSONArray().apply { state.vocabulary.forEach { word -> put(JSONObject()
+            .put("id", word.id).put("word", word.word).put("definition", word.definition)
+            .put("quote", word.quote).put("bookTitle", word.bookTitle).put("createdAt", word.createdAt)) } })
+        put("readingDays", JSONArray().apply { state.readingDays.forEach { put(JSONObject().put("date", it.date).put("millis", it.millis)) } })
     }
 
     private fun encodeBook(book: Book) = JSONObject().apply {
         put("id", book.id)
+        put("format", book.format.name); put("fingerprint", book.fingerprint)
+        put("status", book.status?.name); put("series", book.series); put("volume", book.volume)
+        put("tags", JSONArray(book.tags)); put("deletedAt", book.deletedAt); put("modifiedAt", book.modifiedAt)
+        put("annotationTombstones", JSONArray(book.annotationTombstones.toList()))
+        put("bookmarkTombstones", JSONArray(book.bookmarkTombstones.toList()))
         put("title", book.title)
         put("author", book.author)
         put("epubPath", book.epubPath)
@@ -195,7 +209,7 @@ class LibraryRepository(context: Context) {
         })
         put("chapters", JSONArray().apply {
             book.chapters.forEach {
-                put(JSONObject().put("title", it.title).put("href", it.href).put("mediaType", it.mediaType))
+                put(JSONObject().put("title", it.title).put("href", it.href).put("mediaType", it.mediaType).put("wordCount", it.wordCount))
             }
         })
     }
@@ -212,19 +226,28 @@ class LibraryRepository(context: Context) {
             settings = decodeSettings(json.optJSONObject("settings") ?: JSONObject()),
             appSettings = decodeAppSettings(json.optJSONObject("appSettings") ?: JSONObject()),
             sort = json.optEnum("sort", LibrarySort.RECENT),
-            gridView = json.optBoolean("grid", true)
+            gridView = json.optBoolean("grid", true),
+            vocabulary = json.optJSONArray("vocabulary").mapObjects { VocabularyWord(it.getString("id"), it.getString("word"), it.getString("definition"), it.optString("quote"), it.optString("bookTitle"), it.optLong("createdAt")) },
+            readingDays = json.optJSONArray("readingDays").mapObjects { ReadingDay(it.getString("date"), it.optLong("millis").coerceAtLeast(0L)) }
         )
     }
 
     private fun decodeBook(json: JSONObject): Book = Book(
         id = json.getString("id"),
+        format = json.optEnum("format", BookFormat.EPUB),
+        fingerprint = json.optString("fingerprint"),
+        status = runCatching { ReadingStatus.valueOf(json.optString("status")) }.getOrNull(),
+        series = json.optString("series"), volume = json.optString("volume"), tags = json.optJSONArray("tags").strings(),
+        deletedAt = json.optLong("deletedAt"), modifiedAt = json.optLong("modifiedAt"),
+        annotationTombstones = json.optJSONArray("annotationTombstones").strings().toSet(),
+        bookmarkTombstones = json.optJSONArray("bookmarkTombstones").strings().toSet(),
         title = json.optString("title", "Libro sin título"),
         author = json.optString("author", "Autor desconocido"),
         epubPath = json.getString("epubPath"),
         contentPath = json.getString("contentPath"),
         coverPath = json.optString("coverPath").takeIf { it.isNotBlank() && it != "null" },
         chapters = json.optJSONArray("chapters").mapObjects {
-            Chapter(it.optString("title"), it.getString("href"), it.optString("mediaType"))
+            Chapter(it.optString("title"), it.getString("href"), it.optString("mediaType"), it.optInt("wordCount"))
         },
         addedAt = json.optLong("addedAt"),
         lastOpenedAt = json.optLong("lastOpenedAt"),
@@ -269,13 +292,16 @@ class LibraryRepository(context: Context) {
         put("accent", settings.accent.name)
         put("libraryColumns", settings.libraryColumns)
         put("includeShelvedBooks", settings.includeShelvedBooks)
+        put("dailyGoalMinutes", settings.dailyGoalMinutes); put("adaptiveColumns", settings.adaptiveColumns)
     }
 
     private fun decodeAppSettings(json: JSONObject) = AppSettings(
         themeMode = json.optEnum("themeMode", AppThemeMode.SYSTEM),
         accent = json.optEnum("accent", AppAccent.BLUE),
         libraryColumns = json.optInt("libraryColumns", 3).coerceIn(2, 3),
-        includeShelvedBooks = json.optBoolean("includeShelvedBooks", true)
+        includeShelvedBooks = json.optBoolean("includeShelvedBooks", true),
+        dailyGoalMinutes = json.optInt("dailyGoalMinutes").coerceIn(0, 240),
+        adaptiveColumns = json.optBoolean("adaptiveColumns", true)
     )
 
     private fun encodeSettings(settings: ReaderSettings) = JSONObject().apply {
@@ -337,6 +363,8 @@ class LibraryRepository(context: Context) {
             }
         }
     }
+
+    private fun JSONArray?.strings(): List<String> = if (this == null) emptyList() else (0 until length()).map { getString(it) }
 
     companion object {
         private val databaseLock = Any()

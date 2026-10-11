@@ -218,11 +218,13 @@ class EpubParser(private val context: Context, private val extractionLimit: Long
                 ?.takeIf(File::exists)
                 ?.absolutePath
 
-        val totalWords = chapters.sumOf { chapter ->
+        val weightedChapters = chapters.map { chapter ->
             val file = safeFile(canonicalContentDir, chapter.href)
-            if (!file.exists() || file.length() > 4L * 1024L * 1024L) 0
+            val words = if (!file.exists() || file.length() > 4L * 1024L * 1024L) 0
             else htmlToText(readDocument(file)).split(Regex("\\s+")).count { it.isNotBlank() }
+            chapter.copy(wordCount = words)
         }
+        val totalWords = weightedChapters.sumOf { it.wordCount }
 
         return Book(
             id = id,
@@ -231,7 +233,7 @@ class EpubParser(private val context: Context, private val extractionLimit: Long
             epubPath = epubFile.absolutePath,
             contentPath = canonicalContentDir.absolutePath,
             coverPath = coverPath,
-            chapters = chapters,
+            chapters = weightedChapters,
             totalWords = totalWords
         )
     }

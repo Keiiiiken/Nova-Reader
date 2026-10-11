@@ -371,7 +371,8 @@ fun ReaderScreen(
     readerTarget: ReaderTarget? = null,
     onAnchorChanged: (Int, ReadingAnchor) -> Unit = { _, _ -> },
     onSaveBookmark: (ReaderBookmark) -> Unit = {},
-    onDeleteBookmark: (String) -> Unit = {}
+    onDeleteBookmark: (String) -> Unit = {},
+    onSaveVocabulary: (io.luma.reader.model.VocabularyWord) -> Unit = {}
 ) {
     var chapterIndex by remember(book.id) { mutableIntStateOf(book.chapterIndex.coerceIn(0, book.chapters.lastIndex)) }
     var chapterProgress by remember(book.id) { mutableFloatStateOf(book.chapterProgress) }
@@ -1111,7 +1112,7 @@ fun ReaderScreen(
             }, onDeleteBookmark = onDeleteBookmark,
             onDictionary = { showTools = false; dictionaryWord = "" })
     }
-    dictionaryWord?.let { DictionarySheet(it, onDismiss = { dictionaryWord = null }) }
+    dictionaryWord?.let { DictionarySheet(it, onDismiss = { dictionaryWord = null }, quote = pendingSelection?.text.orEmpty(), bookTitle = book.title, onSave = onSaveVocabulary) }
 
     if (showContents) {
         ContentsSheet(

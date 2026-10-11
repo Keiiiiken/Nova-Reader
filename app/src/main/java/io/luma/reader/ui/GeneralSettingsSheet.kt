@@ -40,7 +40,8 @@ internal fun GeneralSettingsSheet(
     onOpenReadingSettings: () -> Unit,
     onDismiss: () -> Unit,
     onOpenBackup: () -> Unit = {},
-    onOpenDictionary: () -> Unit = {}
+    onOpenDictionary: () -> Unit = {},
+    onManage: (Int) -> Unit = {}
 ) {
     var section by rememberSaveable { mutableIntStateOf(0) }
     val sheetHeight = LocalConfiguration.current.screenHeightDp.dp * .88f
@@ -131,6 +132,16 @@ internal fun GeneralSettingsSheet(
                         }
                     }
                     if (section == 1) item {
+                        SettingsCard("Pantallas y accesibilidad", Icons.Default.AspectRatio) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Adaptar columnas al ancho y al tamaño de letra", Modifier.weight(1f))
+                                Switch(checked = settings.adaptiveColumns, onCheckedChange = { onSettingsChanged(settings.copy(adaptiveColumns = it)) })
+                            }
+                        }
+                    }
+                    if (section == 1) item { SettingsDestination("Organizar biblioteca", "Selección múltiple, estados y fichas de libros.", Icons.Default.Checklist, { onManage(0) }) }
+                    if (section == 1) item { SettingsDestination("Editar estantes", "Nombres y colores de tus colecciones.", Icons.Default.Edit, { onManage(1) }) }
+                    if (section == 1) item {
                         SettingsCard("Libros en inicio", Icons.Default.CollectionsBookmark) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Column(Modifier.weight(1f)) {
@@ -149,6 +160,9 @@ internal fun GeneralSettingsSheet(
                             fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                         item { SettingsDestination("Abrir ajustes de lectura", "Página, tipografía, brillo y narración.", Icons.Default.AutoStories, onOpenReadingSettings) }
                         item { SettingsDestination("Copias de seguridad y Google Drive", "Protege tus libros, progreso y notas.", Icons.Default.CloudUpload, onOpenBackup) }
+                        item { SettingsDestination("Papelera", "Recupera libros eliminados durante 30 días.", Icons.Default.DeleteOutline, { onManage(2) }) }
+                        item { SettingsDestination("Mi vocabulario", "Palabras, definiciones y frases guardadas.", Icons.Default.Bookmark, { onManage(3) }) }
+                        item { SettingsDestination("Actividad de lectura", "Calendario, minutos y meta diaria opcional.", Icons.Default.BarChart, { onManage(4) }) }
                         item { SettingsDestination("Abrir diccionario sin conexión", "Consulta palabras sin salir de Nova Reader.", Icons.Default.MenuBook, onOpenDictionary) }
                         item {
                             TextButton(onClick = { showCredits = true }) {

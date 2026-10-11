@@ -30,6 +30,7 @@ import io.luma.reader.MainViewModel
 @Composable
 fun LumaApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var managerTab by rememberSaveable { mutableStateOf<Int?>(null) }
     var showBackup by rememberSaveable { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val activeBook = state.activeBookId?.let { id ->
@@ -59,6 +60,10 @@ fun LumaApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             }
             return@Surface
         }
+        managerTab?.let { tab ->
+            LibraryManager(state.library, viewModel, tab) { managerTab = null }
+            return@Surface
+        }
         // Animate only actual navigation. Reading progress updates the Book object often;
         // using the full object as Crossfade's target caused a new transition while scrolling.
         Crossfade(targetState = state.activeBookId, label = "main-navigation") { activeId ->
@@ -67,8 +72,10 @@ fun LumaApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
             }
             if (activeId == null || book == null) {
                 LibraryScreen(
-                    state = state,
+                    state = state.copy(library = state.library.copy(books = state.library.books.filter { it.deletedAt == 0L })),
                     snackbarHost = { SnackbarHost(snackbar) },
+                    onManage = { managerTab = it },
+                    onSaveVocabulary = viewModel::saveVocabulary,
                     onImport = viewModel::importBooks,
                     onOpenBook = viewModel::openBook,
                     onToggleFavorite = viewModel::toggleFavorite,
@@ -86,8 +93,12 @@ fun LumaApp(viewModel: MainViewModel, modifier: Modifier = Modifier) {
                     onOpenAnnotation = { bookId, annotation -> viewModel.openAt(bookId, ReaderTarget(annotation.chapterIndex, annotationId = annotation.id)) }
                 )
             } else {
-                ReaderScreen(
+                if (book.format != io.luma.reader.model.BookFormat.EPUB) {
+                    FixedPageReader(book, onBack = viewModel::closeBook, onPosition = { page -> viewModel.updateReadingPosition(book.id, page, 1f) },
+                        onReadingTime = { viewModel.addReadingTime(book.id, it) }, onBookmark = { viewModel.addBookmark(book.id, it) })
+                } else ReaderScreen(
                     book = book,
+                    onSaveVocabulary = viewModel::saveVocabulary,
                     settings = (book.readerSettings ?: state.library.settings).copy(
                         brightness = state.library.settings.brightness,
                         extraDim = state.library.settings.extraDim
