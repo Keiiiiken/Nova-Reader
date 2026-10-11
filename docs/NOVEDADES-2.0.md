@@ -1,6 +1,6 @@
 # Nova Reader 2.0
 
-Esta versión reúne las mejoras de organización, lectura, recuperación y comodidad solicitadas. Las comprobaciones y sus resultados se registran por separado en el informe de validación; esta guía describe el comportamiento previsto.
+Esta versión reúne las mejoras de organización, lectura, recuperación y comodidad solicitadas. Esta guía explica su uso; las comprobaciones, capturas y límites de las pruebas se registran en el [informe de validación](VALIDACION-2.0.0.md).
 
 ## Biblioteca y recuperación
 

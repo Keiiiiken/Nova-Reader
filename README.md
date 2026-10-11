@@ -2,7 +2,7 @@
 
 Nova Reader es una app Android para organizar y leer EPUB 2, EPUB 3, PDF y CBZ sin conexión. Drive es opcional para copias y sincronización manual.
 
-La versión 1.9.1 se instala en paralelo con `io.nova.reader` y usa una nueva firma permanente. Descargar el APK firmado del release. Consulta [instalación y firma](docs/COMPILACION-Y-FIRMA.md) y [configurar Drive](docs/GOOGLE-DRIVE.md).
+Nova Reader 2.0.0 usa `io.nova.reader` y conserva la firma permanente de las versiones 1.9.1 y posteriores. Instala el APK firmado del release como actualización, sin desinstalar la app. La aplicación antigua `io.luma.reader` mantiene sus datos independientes. Consulta [instalación y firma](docs/COMPILACION-Y-FIRMA.md) y [configurar Drive](docs/GOOGLE-DRIVE.md).
 
 ## Funciones incluidas
 
@@ -135,4 +135,4 @@ Los ajustes del lector mantienen la apertura a media pantalla y se amplían al d
 - Narración en segundo plano, controles multimedia y temporizador.
 - Copias persistentes, cancelación y programación opcional; sincronización manual de progreso y notas con elección de conflictos.
 
-Consulta [la guía de novedades y sus límites](docs/NOVEDADES-2.0.md). La compilación, las pruebas de emulador y la firma se realizan en GitHub Actions.
+Consulta [la guía de novedades y sus límites](docs/NOVEDADES-2.0.md) y el [informe de validación con capturas](docs/VALIDACION-2.0.0.md). La compilación, las pruebas de emulador y la firma se realizan en GitHub Actions.

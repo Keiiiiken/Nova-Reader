@@ -1,6 +1,6 @@
 # Estado de las mejoras de Nova Reader
 
-Actualizado para el desarrollo de 2.0.0. Esta lista distingue implementación de validación; las pruebas y la publicación se documentan por versión.
+Actualizado para 2.0.0. Esta lista distingue implementación de validación; las pruebas y la publicación se documentan en el [informe de esta versión](VALIDACION-2.0.0.md).
 
 ## Implementado en 2.0
 
