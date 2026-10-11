@@ -37,7 +37,10 @@ internal object BackupJobs {
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .setConstraints(constraints(destination, false)).build()
         WorkManager.getInstance(context).enqueueUniqueWork(MANUAL, ExistingWorkPolicy.KEEP, request)
-        preferences(context).edit().putString("destination", destination).putString("account", account).putString("uri", uri).apply()
+        val prefs = preferences(context)
+        prefs.edit().putString("destination", destination).putString("account", account).putString("uri", uri).apply()
+        val hours = prefs.getLong("hours", 0)
+        if (hours > 0) schedule(context, hours, prefs.getBoolean("wifi", true))
     }
     fun schedule(context: Context, hours: Long, wifiOnly: Boolean) {
         val prefs = preferences(context)

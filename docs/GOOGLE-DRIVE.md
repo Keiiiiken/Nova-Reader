@@ -1,6 +1,6 @@
 # Configurar Google Drive para Nova Reader
 
-La lectura, el diccionario y las copias locales funcionan sin Internet. Drive es opcional: guarda copias ZIP de libros, progreso, notas, marcadores y ajustes en `appDataFolder`, el espacio oculto de esta app en la cuenta elegida. Las copias son manuales; no hay sincronización continua ni fusión de conflictos.
+La lectura, el diccionario y las copias locales funcionan sin Internet. Drive es opcional: guarda copias ZIP de libros, progreso, notas, marcadores y ajustes en `appDataFolder`, el espacio oculto de esta app en la cuenta elegida. Desde 2.0, las copias pueden ser manuales o programadas. Hay una operación separada para sincronizar progreso, notas y marcadores; permite elegir el avance cuando difiere entre dispositivos. No hay sincronización continua.
 
 ## Pasos en Google Cloud
 
@@ -34,6 +34,12 @@ Antes de abrir la app a todos, cambiar la audiencia a Production y completar los
 
 El token se usa en memoria por operación y no se persiste. Se admiten copias de hasta 2 GiB. Desde 1.9.3, guardar en Drive actualiza el archivo más reciente de esa cuenta. Las copias antiguas de Nova Reader se eliminan solo cuando termina la subida nueva; si la limpieza falla, se informa y puede completarse al volver a guardar. Las copias locales se guardan en el archivo elegido por el usuario.
 
-Se puede cerrar el menú durante una copia: la operación continúa al navegar dentro de Nova Reader, con progreso visible en la biblioteca. No es una tarea persistente que sobreviva al cierre forzado de la app. Se permite leer y cambiar preferencias al guardar; borrar libros y cambiar portadas deben esperar para conservar los archivos que se están copiando. Durante una restauración, la edición espera a que termine. Una interrupción que agote los reintentos requiere iniciar otra copia. Restaurar reemplaza el estado de sus libros y los ajustes globales y conserva los otros libros actuales.
+Se puede cerrar el menú o la actividad durante una copia: WorkManager mantiene el trabajo con una notificación y permite cancelarlo. Android puede reanudarlo tras una interrupción del proceso; un cierre forzado desde los ajustes del sistema impide ejecutarlo hasta volver a abrir la app. La programación diaria o semanal es aproximada y depende de batería, espacio y conexión. Se permite leer y cambiar preferencias al guardar; borrar libros y cambiar portadas deben esperar para conservar los archivos que se están copiando. Durante una restauración, la edición espera a que termine. Si se agotan los reintentos o Google requiere autorizar de nuevo la cuenta, hay que abrir Copias y resolver el error. El token no se guarda en WorkManager: cada ejecución obtiene autorización cuando la necesita. Restaurar reemplaza el estado de sus libros y los ajustes globales y conserva los otros libros actuales.
 
 La conexión con la cuenta elegida y el guardado de una segunda copia deben comprobarse en el teléfono. Las pruebas automatizadas usan HTTPS simulado y comprueban permisos, metadatos, rangos, actualización del mismo archivo, errores y limpieza; no equivalen a una conexión real con Google.
+
+## Sincronizar dos dispositivos
+
+Importa el mismo archivo original en ambos e inicia sesión en la misma cuenta de Drive. En **Copias → Sincronizar progreso y notas**, revisa los avances distintos y elige cuáles recuperar. Ejecuta la operación también en el otro dispositivo para recibir lo compartido. Los libros se reconocen por su contenido, aunque tengan nombres diferentes.
+
+La sincronización usa archivos separados por dispositivo y no reemplaza la copia ZIP. Conserva versiones distintas de las notas para revisarlas; un borrado local no elimina una nota que siga en otro dispositivo. No transfiere los libros, ajustes, papelera ni historial de actividad. Consulta [la guía 2.0](NOVEDADES-2.0.md).

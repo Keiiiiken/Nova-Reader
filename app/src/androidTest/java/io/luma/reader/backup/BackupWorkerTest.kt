@@ -40,6 +40,12 @@ class BackupWorkerTest {
                 .setInputData(workDataOf("destination" to "local", "uri" to Uri.fromFile(destination).toString())).build()
             assertEquals(ListenableWorker.Result.success(workDataOf("message" to "Copia completada")), worker.doWork())
             ZipFile(destination).use { assertNotNull(it.getEntry("manifest.json")) }
+            LibraryRepository(context).save(LibrarySnapshot(vocabulary = listOf(VocabularyWord("updated", "mar", "Masa de agua"))))
+            val replacement = TestListenableWorkerBuilder<BackupWorker>(context)
+                .setInputData(workDataOf("destination" to "local", "uri" to Uri.fromFile(destination).toString())).build()
+            assertEquals(ListenableWorker.Result.success(workDataOf("message" to "Copia completada")), replacement.doWork())
+            val restored = io.luma.reader.data.BackupRepository(context).restore(destination, LibrarySnapshot())
+            assertEquals("mar", restored.vocabulary.single().word)
             assertTrue(BackupJobs.preferences(context).getLong("lastSuccess", 0) > 0)
         } finally { destination.delete() }
     }

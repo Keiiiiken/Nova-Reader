@@ -74,7 +74,7 @@ internal fun LibraryManager(library: LibrarySnapshot, vm: MainViewModel, initial
                     items(books, key = { it.id }) { book ->
                         Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow) {
                             Row(Modifier.fillMaxWidth().clickable { selection = if (book.id in selection) selection - book.id else selection + book.id }.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(checked = book.id in selection, onCheckedChange = { selection = if (it) selection + book.id else selection - book.id }, modifier = Modifier.testTag("select_${book.id}"))
+                                Checkbox(checked = book.id in selection, onCheckedChange = { selection = if (it) selection + book.id else selection - book.id }, modifier = Modifier.testTag("select_${book.id}").semantics { contentDescription = "Seleccionar ${book.title}" })
                                 Column(Modifier.weight(1f).padding(8.dp)) {
                                     Text(book.title, style = MaterialTheme.typography.titleMedium)
                                     Text(book.author, style = MaterialTheme.typography.bodySmall)

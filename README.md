@@ -1,6 +1,6 @@
 # Nova Reader
 
-Nova Reader es una app Android para organizar y leer EPUB 2 y EPUB 3 sin conexión. Drive es opcional para guardar copias.
+Nova Reader es una app Android para organizar y leer EPUB 2, EPUB 3, PDF y CBZ sin conexión. Drive es opcional para copias y sincronización manual.
 
 La versión 1.9.1 se instala en paralelo con `io.nova.reader` y usa una nueva firma permanente. Descargar el APK firmado del release. Consulta [instalación y firma](docs/COMPILACION-Y-FIRMA.md) y [configurar Drive](docs/GOOGLE-DRIVE.md).
 
@@ -110,13 +110,13 @@ La biblioteca migra de SharedPreferences a SQLite. Las escrituras se realizan or
 - [Licencia y datos del diccionario](docs/DICCIONARIO-LICENCIA.md)
 - [Compilación y firma](docs/COMPILACION-Y-FIRMA.md)
 
-Las copias de Drive son manuales y necesitan configurar un cliente OAuth Android para la firma instalada. El APK principal mantiene el paquete y el icono originales.
+Drive necesita un cliente OAuth Android para la firma instalada. Desde 1.9.1, el APK principal usa `io.nova.reader` y la misma firma permanente para sus actualizaciones.
 
 ## Versión 1.9.4
 
 Biblioteca con tarjeta destacada para continuar, portadas tipográficas con detalles geométricos, opciones sobre la portada y títulos con todo el ancho disponible. Estantes con su color elegido y notas en tarjetas de cita. Ajustes separados en Estilo, Biblioteca y Herramientas, con vistas previas de tema y densidad, los cuatro acentos visibles y superficies coherentes en claro y oscuro. Cabeceras con cierre en diccionario y herramientas del lector; las opciones de libro permiten desplazarse.
 
-Consulta [las prioridades pendientes](docs/PRIORIDADES-APP.md) para distinguir las mejoras propuestas de las funciones que ya existen.
+Consulta [el estado de las mejoras](docs/PRIORIDADES-APP.md) para distinguir las funciones implementadas de las comprobaciones pendientes.
 
 [Capturas y validación de 1.9.4](docs/VALIDACION-1.9.4.md).
 
@@ -125,3 +125,14 @@ Consulta [las prioridades pendientes](docs/PRIORIDADES-APP.md) para distinguir l
 Los ajustes del lector mantienen la apertura a media pantalla y se amplían al deslizar hacia arriba dentro de los controles. El botón de la cabecera permite ampliar o reducir el panel; cambiar de pestaña conserva su altura. Cabecera, pestañas, temas y tarjetas más compactos para mostrar más opciones a la vez.
 
 [Capturas y validación de 1.9.5](docs/VALIDACION-1.9.5.md).
+
+## Versión 2.0.0
+
+- Organización por lotes, estados de lectura, autor, series y etiquetas editables; estantes con nombre y color, detección de duplicados y papelera de 30 días.
+- Referencias EPUB en una ventana, progreso ponderado por el texto, siete tipografías incluidas y columnas que se adaptan a la pantalla.
+- Búsqueda y filtros de notas, vocabulario con definiciones y contexto, calendario de lectura y meta diaria.
+- Apertura desde otras apps y lectura de PDF/CBZ con páginas, zoom, progreso y marcadores.
+- Narración en segundo plano, controles multimedia y temporizador.
+- Copias persistentes, cancelación y programación opcional; sincronización manual de progreso y notas con elección de conflictos.
+
+Consulta [la guía de novedades y sus límites](docs/NOVEDADES-2.0.md). La compilación, las pruebas de emulador y la firma se realizan en GitHub Actions.

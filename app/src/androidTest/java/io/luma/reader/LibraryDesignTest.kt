@@ -28,6 +28,10 @@ class LibraryDesignTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private var scenario: ActivityScenario<MainActivity>? = null
 
+    @org.junit.Before fun notificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= 33) InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(context.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
+    }
+
     @After fun cleanUp() {
         scenario?.close()
         io.luma.reader.data.LibraryWrites.awaitIdle()

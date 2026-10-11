@@ -36,6 +36,7 @@ import java.io.File
 data class BackupUiState(
     val busy: Boolean = false,
     val restoring: Boolean = false,
+    val durable: Boolean = false,
     val operation: String = "",
     val progress: Float? = null,
     val error: String? = null,
@@ -69,6 +70,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     internal val syncPreview = MutableStateFlow<io.luma.reader.drive.SyncPreview?>(null)
     private var syncToken: String? = null
     private var saveJob: Job? = null
+    private var backupTaskActive = false
+    private var durableBackup: androidx.work.WorkInfo? = null
     private val pendingImports = mutableListOf<Uri>()
     init {
         observeBackupJobs()
@@ -366,6 +369,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         io.luma.reader.backup.BackupJobs.enqueue(getApplication(), "local", uri = uri.toString())
     }
 
+    fun updateLocalBackup() {
+        val uri = io.luma.reader.backup.BackupJobs.preferences(getApplication()).getString("uri", null)
+        if (uri == null) backupError("Elige el archivo donde guardar la copia") else exportBackup(Uri.parse(uri))
+    }
+
     fun restoreBackup(uri: Uri) = backupOperation("Restaurando copia local", restoring = true) {
         val service = BackupRepository(getApplication())
         val file = service.copyFrom(uri)
@@ -420,8 +428,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val running = jobs.firstOrNull { it.state == androidx.work.WorkInfo.State.RUNNING }
                 val queued = jobs.firstOrNull { it.state == androidx.work.WorkInfo.State.ENQUEUED && it.periodicityInfo == null }
                 val active = running ?: queued
-                if (!_state.value.backup.restoring) _state.update { state -> state.copy(backup = state.backup.copy(
-                    busy = active != null, operation = active?.progress?.getString("label") ?: "Copia en espera",
+                durableBackup = active
+                if (!backupTaskActive) _state.update { state -> state.copy(backup = state.backup.copy(
+                    busy = active != null, durable = active != null, operation = active?.progress?.getString("label") ?: "Copia en espera",
                     progress = active?.progress?.getFloat("progress", -1f)?.takeIf { it >= 0 },
                     lastSuccess = prefs.getLong("lastSuccess", 0), destination = prefs.getString("destination", null),
                     error = if (active == null) prefs.getString("lastError", null) else null,
@@ -470,14 +479,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun backupOperation(label: String, restoring: Boolean = false, operation: suspend () -> String) {
         if (_state.value.backup.busy || _state.value.importing || _state.value.loading) return
         flushPersistence()
-        _state.update { it.copy(backup = it.backup.copy(busy = true, restoring = restoring, operation = label, progress = null, error = null, lastResult = null)) }
+        backupTaskActive = true
+        _state.update { it.copy(backup = it.backup.copy(busy = true, durable = false, restoring = restoring, operation = label, progress = null, error = null, lastResult = null)) }
         viewModelScope.launch {
             try {
-                val result = withContext(Dispatchers.IO) { LibraryWrites.awaitIdle(); operation() }
+                val result = withContext(Dispatchers.IO) {
+                    io.luma.reader.backup.BackupJobs.exclusive { LibraryWrites.awaitIdle(); operation() }
+                }
                 _state.update { it.copy(backup = it.backup.copy(lastResult = result)) }
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) { backupError(e.message ?: "No se pudo completar la copia") }
-            finally { _state.update { it.copy(backup = it.backup.copy(busy = false, restoring = false, progress = null)) } }
+            finally {
+                backupTaskActive = false
+                val active = durableBackup
+                _state.update { it.copy(backup = it.backup.copy(busy = active != null, durable = active != null, restoring = false,
+                    operation = active?.progress?.getString("label") ?: "Copia en espera", progress = null)) }
+            }
         }
     }
 

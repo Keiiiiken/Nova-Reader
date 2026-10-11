@@ -135,7 +135,7 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
             LazyColumn(Modifier.fillMaxWidth().testTag("backup_sheet"),
                 contentPadding = PaddingValues(start = 22.dp, end = 22.dp, top = 12.dp, bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                if (state.busy) item { BackupProgress(state); if (!state.restoring) TextButton(onClick = viewModel::cancelBackup) { Text("Cancelar copia") } }
+                if (state.busy) item { BackupProgress(state); if (state.durable) TextButton(onClick = viewModel::cancelBackup) { Text("Cancelar copia") } }
                 else if (authorizing) item {
                     Text("Conectando Google Drive…")
                     LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -145,7 +145,10 @@ internal fun BackupSheet(state: BackupUiState, viewModel: MainViewModel, onDismi
                 item {
                     SettingsCard("En tu dispositivo", Icons.Default.Folder) {
                         Text("Guarda un archivo ZIP donde prefieras. Incluye libros, portadas, estantes, progreso, notas y ajustes.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        OutlinedButton(onClick = { withNotifications { exportLauncher.launch("NovaReader-copia.zip") } }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Guardar copia local") }
+                        OutlinedButton(onClick = { withNotifications {
+                            if (state.destination == "local") viewModel.updateLocalBackup() else exportLauncher.launch("NovaReader-copia.zip")
+                        } }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text(if (state.destination == "local") "Actualizar copia local" else "Guardar copia local") }
+                        if (state.destination == "local") TextButton(onClick = { withNotifications { exportLauncher.launch("NovaReader-copia.zip") } }, enabled = !busy) { Text("Elegir otro archivo") }
                         OutlinedButton(onClick = { restoreLauncher.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Restaurar copia local") }
                         TextButton(onClick = { notesLauncher.launch("NovaReader-notas.md") }, enabled = !busy) { Text("Exportar notas") }
                     }

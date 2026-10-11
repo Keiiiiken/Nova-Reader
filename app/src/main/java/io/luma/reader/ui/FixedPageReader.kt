@@ -36,6 +36,7 @@ import java.io.File
 @Composable
 internal fun FixedPageReader(book: Book, onBack: () -> Unit, onPosition: (Int) -> Unit,
     onReadingTime: (Long) -> Unit, onBookmark: (ReaderBookmark) -> Unit) {
+    androidx.activity.compose.BackHandler(onBack = onBack)
     val pager = rememberPagerState(initialPage = book.chapterIndex.coerceIn(book.chapters.indices), pageCount = { book.chapters.size })
     val scope = rememberCoroutineScope()
     var scale by remember { mutableFloatStateOf(1f) }
@@ -78,6 +79,7 @@ internal fun FixedPageReader(book: Book, onBack: () -> Unit, onPosition: (Int) -
             // Let the image's native allocation be collected after Compose releases it.
             // Recycling during pager disposal can race a frame still using its texture.
             var x by remember(page) { mutableFloatStateOf(0f) }; var y by remember(page) { mutableFloatStateOf(0f) }
+            LaunchedEffect(scale) { if (scale == 1f) { x = 0f; y = 0f } }
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 bitmap?.let { image ->
                     Image(image.asImageBitmap(), "Página ${page + 1}", Modifier.fillMaxSize()
