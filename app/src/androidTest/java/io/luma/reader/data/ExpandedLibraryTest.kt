@@ -94,11 +94,12 @@ class ExpandedLibraryTest {
     }
     @Test fun pdfAndCbzImportRenderAndSurviveBackup() {
         val pdf = File.createTempFile("document", ".pdf", context.cacheDir).also(created::add)
-        PdfDocument().use { document ->
+        val document = PdfDocument()
+        try {
             repeat(2) { index -> val page = document.startPage(PdfDocument.PageInfo.Builder(300, 400, index + 1).create())
                 page.canvas.drawColor(if (index == 0) android.graphics.Color.WHITE else android.graphics.Color.YELLOW); document.finishPage(page) }
             pdf.outputStream().use(document::writeTo)
-        }
+        } finally { document.close() }
         val pdfBook = track(BookImporter(context).import(Uri.fromFile(pdf)))
         assertEquals(BookFormat.PDF, pdfBook.format); assertEquals(2, pdfBook.chapters.size)
         renderBookPage(pdfBook, 1).also { assertTrue(it.width > 0); it.recycle() }

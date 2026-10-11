@@ -832,8 +832,8 @@ fun ReaderScreen(
             androidx.compose.foundation.lazy.LazyColumn { item { Text(link.text) } }
         }, confirmButton = { TextButton(onClick = { internalLink = null }) { Text("Volver a la lectura") } },
             dismissButton = { if (link.chapterIndex >= 0) TextButton(onClick = {
-                pendingNavigation = ReaderTarget(link.chapterIndex, anchor = ReadingAnchor(-1, 0, link.anchorText))
-                changeChapter(link.chapterIndex, 0f, ReadingAnchor(-1, 0, link.anchorText)); internalLink = null
+                navigate(ReaderTarget(link.chapterIndex, anchor = ReadingAnchor(-1, 0, link.anchorText)))
+                internalLink = null
             }) { Text("Ir al fragmento") } })
     }
     linkError?.let { message -> AlertDialog(onDismissRequest = { linkError = null }, text = { Text(message) }, confirmButton = { TextButton(onClick = { linkError = null }) { Text("Cerrar") } }) }

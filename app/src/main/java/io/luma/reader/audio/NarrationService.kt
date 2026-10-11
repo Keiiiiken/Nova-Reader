@@ -100,7 +100,9 @@ class NarrationService : Service() {
         generation++; nextJob?.cancel(); engine?.stop(); engine?.shutdown(); engine = null
         request = value; chaptersReset(value.chapter, value.chunks, value.chunk, value.offset)
         NarrationPlayer.state.value = NarrationState(bookId = value.book.id, chapter = chapter, paused = true)
+        val initialization = generation
         val init: (Int) -> Unit = { status -> scope.launch {
+            if (initialization != generation) return@launch
             if (status == TextToSpeech.SUCCESS) configureAndPlay() else fail("No se pudo iniciar la voz. Revisa el motor de voz instalado.")
         } }
         engine = if (value.settings.ttsEngine == null) TextToSpeech(applicationContext, init) else TextToSpeech(applicationContext, init, value.settings.ttsEngine)
@@ -133,7 +135,9 @@ class NarrationService : Service() {
                     offset = base + start
                 }
             } }
-            @Deprecated("Deprecated in Android") override fun onError(id: String?) { scope.launch { fail("La voz no pudo continuar. Comprueba los datos del motor de voz.") } }
+            @Deprecated("Deprecated in Android") override fun onError(id: String?) { scope.launch {
+                if (id == "nova-$generation") fail("La voz no pudo continuar. Comprueba los datos del motor de voz.")
+            } }
         })
         resume()
     }
@@ -173,7 +177,7 @@ class NarrationService : Service() {
         val value = request ?: return
         var next = index
         while (next in value.book.chapters.indices) {
-            val parts = withContext(Dispatchers.IO) {
+            val parts = try { withContext(Dispatchers.IO) {
                 val doc = Jsoup.parse(ChapterContent.read(value.book, next))
                 val elements = doc.select("p,li,blockquote,h1,h2,h3,h4,h5,h6,td,pre,figcaption")
                 val blocks = elements.mapIndexedNotNull { i, element ->
@@ -181,6 +185,12 @@ class NarrationService : Service() {
                     else SpeechBlock(i, element.wholeText())
                 }
                 blocks.chunkForSpeech(sentencePauseMs = value.settings.ttsSentencePauseMs, paragraphPauseMs = value.settings.ttsParagraphPauseMs)
+            }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                fail("No se pudo abrir el siguiente capítulo. Vuelve al libro para comprobarlo.")
+                return
             }
             if (parts.isNotEmpty()) { chaptersReset(next, parts); publish(playing = true); speakChunk(); return }
             next++
