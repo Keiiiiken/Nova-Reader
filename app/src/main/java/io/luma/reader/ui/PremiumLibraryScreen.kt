@@ -848,7 +848,7 @@ private fun NotesDashboard(state: AppUiState, onOpenAnnotation: (String, io.luma
         } }
         item { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             item { FilterChip(selected = colorFilter == null, onClick = { colorFilter = null }, label = { Text("Todos los colores") }) }
-            items(listOf(0 to "Amarillo", 1 to "Verde", 2 to "Azul", 3 to "Rosa")) { (index, title) ->
+            items(listOf(0 to "Amarillo", 1 to "Verde", 2 to "Lavanda", 3 to "Rosa")) { (index, title) ->
                 FilterChip(selected = colorFilter == index, onClick = { colorFilter = index }, label = { Text(title) })
             }
         } }
