@@ -76,16 +76,40 @@ class ExpandedLibraryUiTest {
         try {
             android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand("settings put system font_scale 1.5")).use { it.readBytes() }
             scenario?.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+            compose.waitUntil(15000) {
+                var ready = false
+                scenario?.onActivity { ready = it.resources.configuration.let { c -> c.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE && kotlin.math.abs(c.fontScale - 1.5f) < .01f } }
+                ready
+            }
             compose.waitUntilAtLeastOneExists(hasContentDescription("Organizar biblioteca"), 15000)
             compose.onNodeWithContentDescription("Organizar biblioteca").performClick()
             compose.waitUntilAtLeastOneExists(hasTestTag("select_organize"), 15000)
             compose.onNodeWithTag("select_organize").performClick()
-            compose.onNodeWithText("Acciones").assertIsDisplayed()
+            compose.waitUntil(10000) { runCatching { compose.onNodeWithText("Acciones").assertIsDisplayed(); true }.getOrDefault(false) }
             screenshot("organizar-horizontal-letra-grande")
+            compose.onNodeWithText("Acciones").assertIsDisplayed()
         } finally {
             android.os.ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand("settings put system font_scale 1.0")).use { it.readBytes() }
             scenario?.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
         }
+    }
+    @Test fun pausedNarrationAllowsManualChapterNavigation() {
+        scenario?.close(); LibraryWrites.awaitIdle()
+        val library = LibraryRepository(context).load()
+        val book = library.books.single()
+        File(book.contentPath, "two.xhtml").writeText("<html><body><p>Segundo capítulo para continuar leyendo.</p></body></html>")
+        LibraryRepository(context).save(library.copy(books = listOf(book.copy(chapters = book.chapters + Chapter("Dos", "two.xhtml", wordCount = 6)))))
+        try {
+            scenario = ActivityScenario.launch(MainActivity::class.java)
+            compose.waitUntilAtLeastOneExists(hasTestTag("book_${book.id}"), 15000)
+            compose.onNodeWithTag("book_${book.id}").performClick()
+            compose.waitUntilAtLeastOneExists(hasContentDescription("Siguiente"), 15000)
+            compose.runOnIdle { io.luma.reader.audio.NarrationPlayer.state.value = io.luma.reader.audio.NarrationState(bookId = book.id, paused = true) }
+            compose.onNodeWithContentDescription("Siguiente").performClick()
+            compose.waitUntil(10000) { LibraryRepository(context).load().books.single().chapterIndex == 1 }
+            compose.waitForIdle()
+            assertEquals(1, LibraryRepository(context).load().books.single().chapterIndex)
+        } finally { compose.runOnIdle { io.luma.reader.audio.NarrationPlayer.state.value = io.luma.reader.audio.NarrationState() } }
     }
     @Test fun pdfReaderSavesPageAndBookmarkAcrossReopening() {
         val source = File(directory, "document.pdf")

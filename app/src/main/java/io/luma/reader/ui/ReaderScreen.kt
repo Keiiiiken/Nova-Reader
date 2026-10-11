@@ -406,6 +406,7 @@ fun ReaderScreen(
 
     val narration by NarrationPlayer.state.collectAsState()
     val speaking = narration.bookId == book.id && narration.playing
+    var followingNarration by remember(book.id) { mutableStateOf(true) }
     val notificationPermission = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
     val latestReaderSettings = rememberUpdatedState(settings)
     val latestChapterIndex = rememberUpdatedState(chapterIndex)
@@ -466,8 +467,15 @@ fun ReaderScreen(
         }
     }
 
-    LaunchedEffect(narration, webView) {
-        if (narration.bookId == book.id && (narration.playing || narration.paused)) {
+    LaunchedEffect(narration.playing) {
+        if (narration.bookId == book.id && narration.playing) followingNarration = true
+    }
+    LaunchedEffect(narration, webView, followingNarration) {
+        if (followingNarration && narration.bookId == book.id && (narration.playing || narration.paused)) {
+            if (!narration.playing && narration.chapter != chapterIndex) {
+                webView?.clearNarrationPosition()
+                return@LaunchedEffect
+            }
             if (narration.chapter != chapterIndex) {
                 chapterIndex = narration.chapter.coerceIn(book.chapters.indices)
                 chapterProgress = narration.progress
@@ -542,6 +550,7 @@ fun ReaderScreen(
 
     fun changeChapter(newIndex: Int, initialProgress: Float = 0f, anchor: ReadingAnchor? = null) {
         if (newIndex !in book.chapters.indices) return
+        followingNarration = false
         if (narration.bookId == book.id && narration.playing) NarrationPlayer.command(context, "pause")
         webView?.clearNarrationPosition()
         chapterIndex = newIndex
@@ -565,6 +574,8 @@ fun ReaderScreen(
     BackHandler(enabled = !showSettings && !showContents && !showAnnotations && !showTools && dictionaryWord == null && annotationDraft == null) { exitReader() }
 
     fun navigate(target: ReaderTarget) {
+        followingNarration = false
+        if (speaking) NarrationPlayer.command(context, "pause")
         showTools = false
         showAnnotations = false
         if (target.chapterIndex == chapterIndex && webView?.pageReady == true) {
@@ -577,6 +588,7 @@ fun ReaderScreen(
     LaunchedEffect(readerTarget?.id) { readerTarget?.let(::navigate) }
 
     fun startNarration(selection: SelectionData? = null) {
+        followingNarration = true
         if (android.os.Build.VERSION.SDK_INT >= 33) notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         if (selection == null && narration.bookId == book.id && narration.chapter == chapterIndex) {
             NarrationPlayer.command(context, if (narration.playing) "pause" else "play")
@@ -612,7 +624,7 @@ fun ReaderScreen(
                 onWebViewReady = { webView = it },
                 onPageReady = {
                     pendingNavigation?.let { target -> webView?.navigateTo(target); pendingNavigation = null }
-                    if (narration.bookId == book.id && narration.chapter == chapterIndex) {
+                    if (followingNarration && narration.bookId == book.id && narration.chapter == chapterIndex) {
                         webView?.showNarrationPosition(narration.block, narration.start, narration.end, follow = true)
                     }
                 },
