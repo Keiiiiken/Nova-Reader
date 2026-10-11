@@ -335,14 +335,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun updateSettings(settings: ReaderSettings) =
+    fun updateSettings(settings: ReaderSettings) {
         mutateLibrary { it.copy(settings = settings) }
+        refreshNarrationSettings()
+    }
 
     fun updateAppSettings(settings: AppSettings) =
         mutateLibrary { it.copy(appSettings = settings) }
 
-    fun updateBookSettings(bookId: String, settings: ReaderSettings?) =
+    fun updateBookSettings(bookId: String, settings: ReaderSettings?) {
         mutateBook(bookId) { it.copy(readerSettings = settings) }
+        refreshNarrationSettings()
+    }
+
+    private fun refreshNarrationSettings() {
+        val id = io.luma.reader.audio.NarrationPlayer.state.value.bookId ?: return
+        val library = _state.value.library
+        val book = library.books.firstOrNull { it.id == id } ?: return
+        io.luma.reader.audio.NarrationPlayer.updateSettings(getApplication(), id, book.readerSettings ?: library.settings)
+    }
 
     fun setSort(sort: LibrarySort) =
         mutateLibrary { it.copy(sort = sort) }

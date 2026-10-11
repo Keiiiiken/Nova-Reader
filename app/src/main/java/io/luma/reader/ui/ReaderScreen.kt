@@ -406,11 +406,6 @@ fun ReaderScreen(
 
     val narration by NarrationPlayer.state.collectAsState()
     val speaking = narration.bookId == book.id && narration.playing
-    LaunchedEffect(settings.ttsRate, settings.ttsPitch, settings.ttsEngine, settings.ttsLanguageTag,
-        settings.ttsVoiceName, settings.ttsVolume, settings.ttsSentencePauseMs,
-        settings.ttsParagraphPauseMs, settings.ttsChapterPauseMs, settings.ttsAutoAdvance) {
-        NarrationPlayer.updateSettings(context, book.id, settings)
-    }
     val notificationPermission = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
     val latestReaderSettings = rememberUpdatedState(settings)
     val latestChapterIndex = rememberUpdatedState(chapterIndex)

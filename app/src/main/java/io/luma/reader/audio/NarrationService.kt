@@ -31,6 +31,8 @@ internal data class NarrationState(val bookId: String? = null, val chapter: Int 
     val paused: Boolean = false, val sleepAt: Long = 0L, val error: String? = null)
 internal data class NarrationRequest(val book: Book, val settings: ReaderSettings, val chapter: Int,
     val chunks: List<SpeechChunk>, val chunk: Int, val offset: Int)
+private fun ReaderSettings.voiceKey() = listOf(ttsEngine, ttsVoiceName, ttsLanguageTag, ttsRate, ttsPitch,
+    ttsVolume, ttsSentencePauseMs, ttsParagraphPauseMs, ttsChapterPauseMs, ttsAutoAdvance)
 internal object NarrationPlayer {
     val state = MutableStateFlow(NarrationState())
     @Volatile var pending: NarrationRequest? = null
@@ -141,7 +143,7 @@ class NarrationService : Service() {
     }
     private fun updateSettings(settings: ReaderSettings) {
         val previous = request ?: return
-        if (previous.settings == settings) return
+        if (previous.settings.voiceKey() == settings.voiceKey()) return
         val playing = NarrationPlayer.state.value.playing || (!engineReady && playWhenReady)
         chunks = chunks.map { part -> part.copy(pauseAfterMs = when (part.pauseAfterMs) {
             previous.settings.ttsParagraphPauseMs -> settings.ttsParagraphPauseMs
