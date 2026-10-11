@@ -50,6 +50,14 @@ class DriveBackupClientTest {
         assertEquals("https://www.googleapis.com/auth/drive.appdata", DriveBackupClient.SCOPE)
     }
 
+    @Test fun syncFilesAreIsolatedFromTheSingleBackup() = runBlocking {
+        lateinit var response: Response
+        DriveBackupClient("token", kind = "novaSync") { url -> Response(url, 200, "{\"files\":[]}").also { response = it } }.list()
+        val query = java.net.URLDecoder.decode(response.url.query, "UTF-8")
+        assertTrue(query.contains("novaSync")); assertFalse(query.contains("novaBackup"))
+        assertTrue(query.contains("spaces=appDataFolder"))
+    }
+
     @Test fun uploadStoresInPrivateAppFolderAndUsesResumableRanges() = runBlocking {
         val requests = mutableListOf<Response>()
         val file = File.createTempFile("drive-contract", ".zip", ApplicationProvider.getApplicationContext<Context>().cacheDir)

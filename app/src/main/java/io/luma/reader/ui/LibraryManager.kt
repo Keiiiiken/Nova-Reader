@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import io.luma.reader.MainViewModel
 import io.luma.reader.model.*
 import java.time.LocalDate
@@ -170,7 +172,7 @@ private fun ReadingActivity(library: LibrarySnapshot, onGoal: (Int) -> Unit) {
                 (0..6).forEach { day ->
                     val date = today.minusDays((27 - week * 7 - day).toLong())
                     val minutes = (days[date.toString()] ?: 0L) / 60000
-                    Surface(modifier = Modifier.weight(1f), shape = MaterialTheme.shapes.small,
+                    Surface(modifier = Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = "$date: $minutes minutos" }, shape = MaterialTheme.shapes.small,
                         color = if (minutes > 0 && (goal == 0 || minutes >= goal)) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow) {
                         Column(Modifier.padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("${date.dayOfMonth}", style = MaterialTheme.typography.labelMedium)

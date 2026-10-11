@@ -15,7 +15,7 @@ import javax.net.ssl.HttpsURLConnection
 data class DriveBackup(val id: String, val name: String, val modifiedTime: String, val size: Long)
 
 /** Uses only drive.appdata. Access tokens remain in memory for one user-initiated operation. */
-internal class DriveBackupClient(private val accessToken: String, private val connectionFactory: (URL) -> HttpsURLConnection = { it.openConnection() as HttpsURLConnection }, private val kind: String = "novaBackup", private val fileName: String? = null) {
+internal class DriveBackupClient(private val accessToken: String, private val kind: String = "novaBackup", private val fileName: String? = null, private val connectionFactory: (URL) -> HttpsURLConnection = { it.openConnection() as HttpsURLConnection }) {
     suspend fun list(): List<DriveBackup> = listPage(null).first
 
     private suspend fun listPage(pageToken: String?): Pair<List<DriveBackup>, String?> {

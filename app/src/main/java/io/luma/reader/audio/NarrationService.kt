@@ -198,7 +198,8 @@ class NarrationService : Service() {
             .setState(if (playing) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f).build())
         session.setMetadata(MediaMetadataCompat.Builder().putString(MediaMetadataCompat.METADATA_KEY_TITLE, request?.book?.title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, request?.book?.chapters?.getOrNull(chapter)?.title).build())
-        getSystemService(NotificationManager::class.java).notify(211, notification())
+        if (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED)
+            getSystemService(NotificationManager::class.java).notify(211, notification())
     }
     private fun persist() {
         val state = NarrationPlayer.state.value

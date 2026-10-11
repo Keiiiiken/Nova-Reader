@@ -265,6 +265,20 @@ class ReaderInteractionTest {
     }
 
     @Test
+    fun internalFootnoteOpensWithoutMovingTheReadingPosition() {
+        val book = seedLibrary(ReadingMode.SCROLL)
+        File(book.contentPath, book.chapters.first().href).writeText("<html><body><p>Texto principal <a id='reference' href='second.xhtml#note'>nota</a></p></body></html>")
+        File(book.contentPath, "text/second.xhtml").writeText("<html><body><p id='note'>Explicación de la referencia local.</p></body></html>")
+        launchAndOpen(book)
+        evaluateInReader("document.getElementById('reference').click(); 'ok'")
+        compose.waitUntilAtLeastOneExists(hasText("Explicación de la referencia local."), 8000)
+        screenshot("referencia-epub")
+        compose.onNodeWithText("Volver a la lectura").performClick()
+        compose.onNodeWithTag("epub_content").assertExists()
+        assertEquals(0, LibraryRepository(context).load().books.single().chapterIndex)
+    }
+
+    @Test
     fun searchNavigatesToAResultInAnotherChapter() {
         val book = seedLibrary(ReadingMode.SCROLL)
         File(book.contentPath, "text/second.xhtml").writeText("<html><body><h1>Destino de búsqueda</h1><p>Una luciérnaga ilumina el camino.</p></body></html>")

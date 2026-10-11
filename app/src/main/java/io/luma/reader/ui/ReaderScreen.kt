@@ -391,6 +391,7 @@ fun ReaderScreen(
     var internalLink by remember { mutableStateOf<io.luma.reader.reader.InternalLink?>(null) }
     var linkError by remember { mutableStateOf<String?>(null) }
     val linkScope = rememberCoroutineScope()
+    var dictionaryQuote by remember { mutableStateOf("") }
     var dictionaryWord by remember { mutableStateOf<String?>(null) }
     var chapterAnchor by remember(book.id) { mutableStateOf(book.readingAnchor) }
     var pendingNavigation by remember(book.id) { mutableStateOf<ReaderTarget?>(null) }
@@ -793,7 +794,17 @@ fun ReaderScreen(
                             Spacer(Modifier.width(6.dp))
                             Text("Subrayar", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                         }
-                        IconButton(onClick = { dictionaryWord = pendingSelection?.text }, modifier = Modifier.testTag("lookup_selection")) {
+                        IconButton(onClick = {
+                            val selected = pendingSelection
+                            if (selected != null) {
+                                dictionaryQuote = selected.text
+                                val script = "(function(){var b=document.querySelectorAll('p,li,blockquote,h1,h2,h3,h4,h5,h6,td,pre,figcaption')[${selected.blockIndex}];return b ? b.textContent.substring(0,1000) : '';})()"
+                                webView?.evaluateJavascript(script) { value ->
+                                    dictionaryQuote = runCatching { org.json.JSONArray("[$value]").getString(0) }.getOrDefault(selected.text)
+                                    dictionaryWord = selected.text
+                                } ?: run { dictionaryWord = selected.text }
+                            }
+                        }, modifier = Modifier.testTag("lookup_selection")) {
                             Icon(Icons.Default.MenuBook, "Consultar diccionario", tint = ReaderAccent)
                         }
                     }
@@ -812,7 +823,7 @@ fun ReaderScreen(
                         anchor?.text?.take(80).orEmpty().ifBlank { book.chapters[index].title }))
                 }
             }, onDeleteBookmark = onDeleteBookmark,
-            onDictionary = { showTools = false; dictionaryWord = "" })
+            onDictionary = { showTools = false; dictionaryQuote = ""; dictionaryWord = "" })
     }
     if (narration.bookId == book.id && narration.error != null) AlertDialog(onDismissRequest = { NarrationPlayer.command(context, "stop") },
         text = { Text(narration.error!!) }, confirmButton = { TextButton(onClick = { NarrationPlayer.command(context, "stop") }) { Text("Cerrar") } })
@@ -826,7 +837,7 @@ fun ReaderScreen(
             }) { Text("Ir al fragmento") } })
     }
     linkError?.let { message -> AlertDialog(onDismissRequest = { linkError = null }, text = { Text(message) }, confirmButton = { TextButton(onClick = { linkError = null }) { Text("Cerrar") } }) }
-    dictionaryWord?.let { DictionarySheet(it, onDismiss = { dictionaryWord = null }, quote = pendingSelection?.text.orEmpty(), bookTitle = book.title, onSave = onSaveVocabulary) }
+    dictionaryWord?.let { DictionarySheet(it, onDismiss = { dictionaryWord = null }, quote = dictionaryQuote, bookTitle = book.title, onSave = onSaveVocabulary) }
 
     if (showContents) {
         ContentsSheet(

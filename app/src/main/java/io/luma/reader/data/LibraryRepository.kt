@@ -52,8 +52,19 @@ class LibraryRepository(context: Context) {
                 json.put("books", books)
                 decode(json)
             }
-            lastSaved = result
-            result
+            val audio = appContext.getSharedPreferences("nova_narration", Context.MODE_PRIVATE)
+            val stamp = audio.getLong("time", 0)
+            val recovered = result.copy(books = result.books.map { book ->
+                if (book.id == audio.getString("book", null) && stamp > maxOf(book.lastOpenedAt, book.modifiedAt) && book.chapters.isNotEmpty()) {
+                    val chapter = audio.getInt("chapter", 0).coerceIn(book.chapters.indices)
+                    val fraction = audio.getFloat("progress", 0f).coerceIn(0f, 1f)
+                    book.copy(chapterIndex = chapter, chapterProgress = fraction, progress = book.weightedProgress(chapter, fraction),
+                        readingAnchor = ReadingAnchor(audio.getInt("block", 0), audio.getInt("offset", 0)), lastOpenedAt = stamp)
+                } else book
+            })
+            if (recovered != result) writeSnapshot(db, recovered, result)
+            lastSaved = recovered
+            recovered
         }
     }
 

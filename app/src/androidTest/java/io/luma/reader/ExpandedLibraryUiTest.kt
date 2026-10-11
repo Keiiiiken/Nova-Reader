@@ -17,6 +17,7 @@ import org.junit.runner.RunWith
 import java.io.File
 
 @RunWith(AndroidJUnit4::class)
+@OptIn(ExperimentalTestApi::class)
 class ExpandedLibraryUiTest {
     @get:Rule val compose = createEmptyComposeRule()
     private val context = ApplicationProvider.getApplicationContext<Context>()
@@ -69,6 +70,22 @@ class ExpandedLibraryUiTest {
         screenshot("actividad")
         compose.onNodeWithText("Vocabulario").performClick()
         compose.onNodeWithText("Guarda palabras desde el diccionario para encontrarlas aquí.").assertExists()
+    }
+    @Test fun libraryRemainsUsableInLandscapeWithLargeText() {
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        try {
+            automation.executeShellCommand("settings put system font_scale 1.5").close()
+            scenario?.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+            compose.waitUntilAtLeastOneExists(hasContentDescription("Organizar biblioteca"), 15000)
+            compose.onNodeWithContentDescription("Organizar biblioteca").performClick()
+            compose.waitUntilAtLeastOneExists(hasTestTag("select_organize"), 15000)
+            compose.onNodeWithTag("select_organize").performClick()
+            compose.onNodeWithText("Acciones").assertIsDisplayed()
+            screenshot("organizar-horizontal-letra-grande")
+        } finally {
+            automation.executeShellCommand("settings put system font_scale 1.0").close()
+            scenario?.onActivity { it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
+        }
     }
     private fun screenshot(name: String) {
         compose.waitForIdle(); Thread.sleep(350)

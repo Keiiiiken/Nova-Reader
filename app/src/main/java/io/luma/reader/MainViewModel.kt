@@ -86,17 +86,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     } else book.chapters
                     book.copy(fingerprint = hash, chapters = chapters)
                 })
-                val narration = application.getSharedPreferences("nova_narration", android.content.Context.MODE_PRIVATE)
-                val recovered = upgraded.copy(books = upgraded.books.map { book ->
-                    if (book.id == narration.getString("book", null) && narration.getLong("time", 0) > book.lastOpenedAt) {
-                        val chapter = narration.getInt("chapter", 0).coerceIn(book.chapters.indices)
-                        val fraction = narration.getFloat("progress", 0f).coerceIn(0f, 1f)
-                        book.copy(chapterIndex = chapter, chapterProgress = fraction, progress = book.weightedProgress(chapter, fraction),
-                            readingAnchor = ReadingAnchor(narration.getInt("block", 0), narration.getInt("offset", 0)), lastOpenedAt = narration.getLong("time", 0))
-                    } else book
-                })
-                if (recovered != old) repository.save(recovered)
-                recovered
+                if (upgraded != old) repository.save(upgraded)
+                upgraded
             } }
                 .onSuccess { library ->
                     _state.update { it.copy(library = library, loading = false) }

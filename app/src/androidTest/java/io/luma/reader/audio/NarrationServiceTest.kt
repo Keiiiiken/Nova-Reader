@@ -19,6 +19,7 @@ class NarrationServiceTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     @After fun stop() { context.stopService(android.content.Intent(context, NarrationService::class.java)) }
     @Test fun narrationSurvivesClosingActivityAndSupportsPauseResumeAndTimer() {
+        if (android.os.Build.VERSION.SDK_INT >= 33) InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(context.packageName, android.Manifest.permission.POST_NOTIFICATIONS)
         val scenario = ActivityScenario.launch(MainActivity::class.java)
         val book = Book("audio-fixture", "Libro narrado", "Autora", "", "", chapters = listOf(Chapter("Uno", "")))
         val settings = ReaderSettings(ttsEngine = InstrumentationRegistry.getInstrumentation().context.packageName, ttsLanguageTag = "es-ES", ttsAutoAdvance = false)

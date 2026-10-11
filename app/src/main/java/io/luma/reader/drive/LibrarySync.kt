@@ -79,8 +79,8 @@ internal object LibrarySync {
         } finally { file.delete() }
     }
     private fun fileName(context: Context): String {
-        val prefs = context.getSharedPreferences("nova_sync", Context.MODE_PRIVATE)
-        val id = prefs.getString("device", null) ?: UUID.randomUUID().toString().also { prefs.edit().putString("device", it).commit() }
+        val identity = File(context.noBackupFilesDir, "sync-device-id")
+        val id = if (identity.isFile) identity.readText().trim() else UUID.randomUUID().toString().also { identity.writeText(it) }
         return "NovaReader-sync-$id.zip"
     }
     fun applyChoices(current: LibrarySnapshot, preview: SyncPreview, remoteIds: Set<String>): LibrarySnapshot {
