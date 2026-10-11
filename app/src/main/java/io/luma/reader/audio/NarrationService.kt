@@ -268,7 +268,7 @@ class NarrationService : Service() {
     private fun fail(message: String) { pause(); NarrationPlayer.state.value = NarrationPlayer.state.value.copy(error = message) }
     private fun notification(): Notification {
         fun action(name: String) = PendingIntent.getService(this, name.hashCode(), Intent(this, NarrationService::class.java).setAction(name), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val open = PendingIntent.getActivity(this, 211, Intent(this, MainActivity::class.java).putExtra("narrationBook", request?.book?.id), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val open = PendingIntent.getActivity(this, 211, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP).putExtra("narrationBook", request?.book?.id), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val playing = NarrationPlayer.state.value.playing
         return NotificationCompat.Builder(this, "nova-narration").setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle(request?.book?.title ?: "Nova Reader").setContentText(request?.book?.chapters?.getOrNull(chapter)?.title ?: "Preparando narración")
