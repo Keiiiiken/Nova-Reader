@@ -89,7 +89,8 @@ class LibraryRepository(context: Context) {
                 if (oldBooks[book.id] != book || previous?.books?.getOrNull(index)?.id != book.id) {
                     db.insertWithOnConflict("books", null, ContentValues().apply {
                         put("id", book.id)
-; put("payload", encodeBook(book).toString()); put("ordinal", index)
+                        put("payload", encodeBook(book).toString())
+                        put("ordinal", index)
                     }, android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE).also { check(it != -1L) }
                 }
             }
