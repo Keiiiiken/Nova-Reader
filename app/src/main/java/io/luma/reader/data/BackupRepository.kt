@@ -97,7 +97,7 @@ internal class BackupRepository(private val context: Context) {
                         output.path
                     } ?: imported.coverPath
                     staged[staged.lastIndex] = original.copy(epubPath = imported.epubPath, contentPath = imported.contentPath,
-                        coverPath = cover, chapters = imported.chapters,
+                        coverPath = cover, chapters = imported.chapters, fingerprint = imported.fingerprint,
                         chapterIndex = original.chapterIndex.coerceIn(imported.chapters.indices),
                         chapterProgress = original.chapterProgress.coerceIn(0f, 1f), progress = original.progress.coerceIn(0f, 1f),
                         collectionId = original.collectionId?.takeIf { id -> source.collections.any { it.id == id } })

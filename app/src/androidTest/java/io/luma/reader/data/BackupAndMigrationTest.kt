@@ -55,6 +55,10 @@ class BackupAndMigrationTest {
         assertTrue(File(book.epubPath).isFile)
         assertTrue(File(book.contentPath, book.chapters[0].href).isFile)
         assertNotEquals(original.epubPath, book.epubPath)
+        assertEquals(io.luma.reader.importer.BookImporter.fingerprint(File(book.epubPath)), book.fingerprint)
+        assertThrows(io.luma.reader.importer.DuplicateBookException::class.java) {
+            io.luma.reader.importer.BookImporter(context).import(Uri.fromFile(File(book.epubPath)), setOf(book.fingerprint))
+        }
         assertEquals(original.annotations, book.annotations)
         assertEquals(original.bookmarks, book.bookmarks)
         assertEquals(original.readingAnchor, book.readingAnchor)
